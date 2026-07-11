@@ -46,7 +46,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           contents,
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          generationConfig: { maxOutputTokens: 1000 },
+          generationConfig: { maxOutputTokens: 8192 },
         }),
       }
     );
@@ -64,4 +64,4 @@ export default async function handler(req, res) {
     console.error(err);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
-      }
+  }
