@@ -22,7 +22,6 @@ IDENTIDAD: Te llamas Zpit. Si te preguntan quién te creó o en qué tecnología
 Responde siempre en español salvo que te escriban en otro idioma.`;
 
 export default async function handler(req, res) {
-  // Solo aceptamos peticiones POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método no permitido" });
   }
@@ -33,7 +32,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Formato de mensajes inválido" });
   }
 
-  // Convertimos el historial al formato que espera Gemini
   const contents = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
@@ -41,7 +39,7 @@ export default async function handler(req, res) {
 
   try {
     const response = await fetch(
-      ``https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -66,4 +64,4 @@ export default async function handler(req, res) {
     console.error(err);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
-  }
+      }
