@@ -1,6 +1,6 @@
 // api/chat.js
 // Esta función corre en el servidor de Vercel, nunca en el navegador del usuario.
-// Por eso la API key está segura aquí (en la variable de entorno ANTHROPIC_API_KEY),
+// Por eso la API key está segura aquí (en la variable de entorno GEMINI_API_KEY),
 // y nadie que visite tu web puede verla ni robarla.
 
 const SYSTEM_PROMPT = `Eres Zpit, una inteligencia artificial diseñada para pensar, analizar y crear soluciones innovadoras. Tu propósito es ayudar a las personas a resolver problemas, desarrollar proyectos, aprender y tomar mejores decisiones mediante razonamiento lógico, creatividad y evidencia.
@@ -33,33 +33,37 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Formato de mensajes inválido" });
   }
 
+  // Convertimos el historial al formato que espera Gemini
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        system: SYSTEM_PROMPT,
-        messages: messages,
-      }),
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents,
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          generationConfig: { maxOutputTokens: 1000 },
+        }),
+      }
+    );
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Error de Anthropic API:", data);
+      console.error("Error de Gemini API:", data);
       return res.status(502).json({ error: "Error al contactar el modelo" });
     }
 
-    const text = data.content?.map((c) => (c.type === "text" ? c.text : "")).join("\n") || "";
-    return res.status(200).json({ reply: text });
+    const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("\n") || "";
+    return res.status(200).json({ reply: text || "No pude generar una respuesta." });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
-      }
+  }
