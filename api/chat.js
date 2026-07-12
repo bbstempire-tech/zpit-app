@@ -38,8 +38,8 @@ export default async function handler(req, res) {
   }));
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:streamGenerateContent?alt=sse&key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,17 +51,47 @@ export default async function handler(req, res) {
       }
     );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("Error de Gemini API:", data);
+    if (!geminiRes.ok || !geminiRes.body) {
+      const errData = await geminiRes.json().catch(() => ({}));
+      console.error("Error de Gemini API:", errData);
       return res.status(502).json({ error: "Error al contactar el modelo" });
     }
 
-    const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("\n") || "";
-    return res.status(200).json({ reply: text || "No pude generar una respuesta." });
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+
+    const reader = geminiRes.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const chunkText = parsed.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
+          if (chunkText) res.write(chunkText);
+        } catch (e) {
+          // Ignoramos líneas que no se puedan parsear (pueden venir cortadas)
+        }
+      }
+    }
+
+    res.end();
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "Error interno del servidor" });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: "Error interno del servidor" });
+    }
+    res.end();
   }
-  }
+}
