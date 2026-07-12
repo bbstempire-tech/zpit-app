@@ -48,7 +48,7 @@ function isComplexQuestion(text) {
   return text.length > 280;
 }
 
-// --- Streaming para modelos estilo Gemini ---
+// --- Streaming para modelos estilo Gemini (soporta imágenes) ---
 
 async function streamGemini(model, apiKey, contents, res) {
   const geminiRes = await fetch(
@@ -161,17 +161,25 @@ export default async function handler(req, res) {
 
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const text = lastUserMsg?.content || "";
+  const hasImage = !!(lastUserMsg && lastUserMsg.image);
 
-  const codeQuestion = isCodeQuestion(text);
-  const complexQuestion = isComplexQuestion(text);
+  const codeQuestion = !hasImage && isCodeQuestion(text);
+  const complexQuestion = !hasImage && isComplexQuestion(text);
 
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
 
-  const geminiContents = messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
+  const geminiContents = messages.map((m) => {
+    const parts = [];
+    if (m.content) parts.push({ text: m.content });
+    if (m.image && m.image.data && m.image.mimeType) {
+      parts.push({ inline_data: { mime_type: m.image.mimeType, data: m.image.data } });
+    }
+    return {
+      role: m.role === "assistant" ? "model" : "user",
+      parts: parts.length ? parts : [{ text: "" }],
+    };
+  });
 
   const openaiMessages = messages.map((m) => ({
     role: m.role === "assistant" ? "assistant" : "user",
@@ -180,39 +188,46 @@ export default async function handler(req, res) {
 
   const attempts = [];
 
-  if (codeQuestion) {
-    if (process.env.DEEPSEEK_API_KEY) {
-      attempts.push(() =>
-        streamOpenAICompatible(
-          "https://api.deepseek.com",
-          process.env.DEEPSEEK_API_KEY,
-          "deepseek-chat",
-          openaiMessages,
-          res
-        )
-      );
+  if (hasImage) {
+    if (process.env.GEMINI_API_KEY) {
+      attempts.push(() => streamGemini("gemini-flash-lite-latest", process.env.GEMINI_API_KEY, geminiContents, res));
+      attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
     }
-    if (process.env.OPENROUTER_API_KEY) {
-      attempts.push(() =>
-        streamOpenAICompatible(
-          "https://openrouter.ai/api/v1",
-          process.env.OPENROUTER_API_KEY,
-          "qwen/qwen3-coder:free",
-          openaiMessages,
-          res,
-          { "HTTP-Referer": "https://zpit-app.vercel.app", "X-Title": "Zpit" }
-        )
-      );
+  } else {
+    if (codeQuestion) {
+      if (process.env.DEEPSEEK_API_KEY) {
+        attempts.push(() =>
+          streamOpenAICompatible(
+            "https://api.deepseek.com",
+            process.env.DEEPSEEK_API_KEY,
+            "deepseek-chat",
+            openaiMessages,
+            res
+          )
+        );
+      }
+      if (process.env.OPENROUTER_API_KEY) {
+        attempts.push(() =>
+          streamOpenAICompatible(
+            "https://openrouter.ai/api/v1",
+            process.env.OPENROUTER_API_KEY,
+            "qwen/qwen3-coder:free",
+            openaiMessages,
+            res,
+            { "HTTP-Referer": "https://zpit-app.vercel.app", "X-Title": "Zpit" }
+          )
+        );
+      }
     }
-  }
 
-  if (complexQuestion && process.env.GEMINI_API_KEY) {
-    attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
-  }
+    if (complexQuestion && process.env.GEMINI_API_KEY) {
+      attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
+    }
 
-  if (process.env.GEMINI_API_KEY) {
-    attempts.push(() => streamGemini("gemini-flash-lite-latest", process.env.GEMINI_API_KEY, geminiContents, res));
-    attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
+    if (process.env.GEMINI_API_KEY) {
+      attempts.push(() => streamGemini("gemini-flash-lite-latest", process.env.GEMINI_API_KEY, geminiContents, res));
+      attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
+    }
   }
 
   let succeeded = false;
@@ -233,4 +248,4 @@ export default async function handler(req, res) {
   }
 
   res.end();
-          }
+        }
