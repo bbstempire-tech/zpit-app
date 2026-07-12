@@ -197,11 +197,12 @@ export default async function handler(req, res) {
   }
 
   if (complexQuestion && process.env.GEMINI_API_KEY) {
-    attempts.push(() => streamGemini("gemini-2.5-flash", process.env.GEMINI_API_KEY, geminiContents, res));
+    attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
   }
 
   if (process.env.GEMINI_API_KEY) {
-    attempts.push(() => streamGemini("gemini-2.5-flash-lite", process.env.GEMINI_API_KEY, geminiContents, res));
+    attempts.push(() => streamGemini("gemini-flash-lite-latest", process.env.GEMINI_API_KEY, geminiContents, res));
+    attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
   }
 
   let succeeded = false;
@@ -222,4 +223,4 @@ export default async function handler(req, res) {
   }
 
   res.end();
-        }
+          }
