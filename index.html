@@ -22,7 +22,7 @@
     padding: 24px 12px;
   }
   .mono { font-family: 'JetBrains Mono', monospace; }
-  .app { width: 100%; max-width: 640px; display: flex; flex-direction: column; height: 92vh; }
+  .app { width: 100%; max-width: 640px; display: flex; flex-direction: column; height: 92vh; position: relative; }
   .header {
     border: 1px solid #C9A227;
     border-radius: 2px;
@@ -38,6 +38,12 @@
   .header .label { font-size: 11px; letter-spacing: 3px; color: #D9BA5C; margin-bottom: 4px; }
   .header .titlerow { display: flex; align-items: center; gap: 10px; }
   .header .title { font-size: 26px; font-weight: 700; letter-spacing: 1px; color: #F2E9C9; }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .icon-btn {
+    background: none; border: 1px solid #C9A22755; color: #D9BA5C;
+    width: 32px; height: 32px; border-radius: 2px; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+  }
   .clear-btn {
     background: none; border: 1px solid #C9A22755; color: #D9BA5C;
     font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px;
@@ -144,6 +150,37 @@
   table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13.5px; }
   th, td { border: 1px solid #4A3D18; padding: 6px 8px; text-align: left; }
   th { background: rgba(201,162,39,0.12); }
+
+  .overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(10,8,3,0.75);
+    display: none;
+    z-index: 10;
+  }
+  .overlay.open { display: block; }
+  .chat-panel {
+    position: absolute; top: 0; left: 0; bottom: 0;
+    width: 82%; max-width: 320px;
+    background: #2E2610;
+    border-right: 1px solid #C9A227;
+    display: flex; flex-direction: column;
+    padding: 16px 12px;
+  }
+  .chat-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .new-chat-btn {
+    background: #D97D25; border: none; color: #2E2610; font-weight: 700;
+    border-radius: 2px; padding: 8px 12px; font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; cursor: pointer; width: 100%; margin-bottom: 10px;
+  }
+  .chat-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .chat-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px; border-radius: 2px; cursor: pointer;
+    border: 1px solid transparent; color: #D9BA5C; font-size: 13px;
+  }
+  .chat-item.active { background: rgba(201,162,39,0.15); border-color: #C9A22755; color: #F2E9C9; }
+  .chat-item span.title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-item .del { color: #D97D25; font-weight: 700; padding: 0 4px; }
 </style>
 </head>
 <body>
@@ -153,11 +190,14 @@
       <span class="corner" style="top:-1px;right:-1px;border-top:1px solid;border-right:1px solid;"></span>
       <span class="corner" style="bottom:-1px;left:-1px;border-bottom:1px solid;border-left:1px solid;"></span>
       <span class="corner" style="bottom:-1px;right:-1px;border-bottom:1px solid;border-right:1px solid;"></span>
-      <div>
-        <div class="label mono">UNIDAD DE RAZONAMIENTO</div>
-        <div class="titlerow">
-          <div class="title">ZPIT</div>
-          <button class="clear-btn" id="clearBtn">BORRAR CHAT</button>
+      <div class="header-left">
+        <button class="icon-btn" id="menuBtn" title="Tus chats">☰</button>
+        <div>
+          <div class="label mono">UNIDAD DE RAZONAMIENTO</div>
+          <div class="titlerow">
+            <div class="title">ZPIT</div>
+            <button class="clear-btn" id="clearBtn">BORRAR</button>
+          </div>
         </div>
       </div>
       <div class="status mono"><span class="dot"></span>EN LÍNEA</div>
@@ -175,6 +215,17 @@
       <textarea id="input" rows="1" placeholder="Escribe tu problema o pregunta..."></textarea>
       <button class="send" id="sendBtn">ENVIAR</button>
     </div>
+
+    <div class="overlay" id="overlay">
+      <div class="chat-panel">
+        <div class="chat-panel-header">
+          <div class="mono" style="font-size:12px;letter-spacing:2px;color:#D9BA5C;">TUS CHATS</div>
+          <button class="icon-btn" id="closePanelBtn">✕</button>
+        </div>
+        <button class="new-chat-btn" id="newChatBtn">+ NUEVO CHAT</button>
+        <div class="chat-list" id="chatList"></div>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -185,23 +236,92 @@
   const attachBtn = document.getElementById('attachBtn');
   const fileInput = document.getElementById('fileInput');
   const previewArea = document.getElementById('previewArea');
-  const STORAGE_KEY = 'zpit_messages';
+  const menuBtn = document.getElementById('menuBtn');
+  const closePanelBtn = document.getElementById('closePanelBtn');
+  const overlay = document.getElementById('overlay');
+  const newChatBtn = document.getElementById('newChatBtn');
+  const chatList = document.getElementById('chatList');
 
-  let messages = [];
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) messages = JSON.parse(saved);
-  } catch (e) {
-    messages = [];
-  }
+  const CONVOS_KEY = 'zpit_conversations';
+  const ACTIVE_KEY = 'zpit_active_id';
 
+  let conversations = [];
+  let activeId = null;
   let loading = false;
   let pendingImage = null;
 
-  function saveMessages() {
+  function loadConversations() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      const saved = localStorage.getItem(CONVOS_KEY);
+      conversations = saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      conversations = [];
+    }
+    activeId = localStorage.getItem(ACTIVE_KEY);
+
+    if (conversations.length === 0) {
+      createConversation();
+    } else if (!activeId || !conversations.find((c) => c.id === activeId)) {
+      activeId = conversations[0].id;
+    }
+  }
+
+  function saveConversations() {
+    try {
+      localStorage.setItem(CONVOS_KEY, JSON.stringify(conversations));
+      localStorage.setItem(ACTIVE_KEY, activeId);
     } catch (e) {}
+  }
+
+  function getActiveConvo() {
+    return conversations.find((c) => c.id === activeId);
+  }
+
+  function createConversation() {
+    const convo = { id: 'c_' + Date.now(), title: 'Nuevo chat', messages: [] };
+    conversations.unshift(convo);
+    activeId = convo.id;
+    saveConversations();
+  }
+
+  function switchConversation(id) {
+    activeId = id;
+    saveConversations();
+    renderChatList();
+    render();
+    overlay.classList.remove('open');
+  }
+
+  function deleteConversation(id, e) {
+    e.stopPropagation();
+    conversations = conversations.filter((c) => c.id !== id);
+    if (conversations.length === 0) {
+      createConversation();
+    } else if (activeId === id) {
+      activeId = conversations[0].id;
+    }
+    saveConversations();
+    renderChatList();
+    render();
+  }
+
+  function renderChatList() {
+    chatList.innerHTML = '';
+    for (const c of conversations) {
+      const item = document.createElement('div');
+      item.className = 'chat-item' + (c.id === activeId ? ' active' : '');
+      const title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = c.title || 'Nuevo chat';
+      const del = document.createElement('span');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.onclick = (e) => deleteConversation(c.id, e);
+      item.appendChild(title);
+      item.appendChild(del);
+      item.onclick = () => switchConversation(c.id);
+      chatList.appendChild(item);
+    }
   }
 
   function renderPreview() {
@@ -224,6 +344,8 @@
   }
 
   function render() {
+    const convo = getActiveConvo();
+    const messages = convo ? convo.messages : [];
     log.innerHTML = '';
     if (messages.length === 0) {
       log.innerHTML = '<div class="empty mono">[ SISTEMA LISTO — PLANTEA UN PROBLEMA PARA COMENZAR EL ANÁLISIS ]</div>';
@@ -291,33 +413,42 @@
     const text = input.value.trim();
     if ((!text && !pendingImage) || loading) return;
 
+    const convo = getActiveConvo();
+    if (!convo) return;
+
     const userMsg = { role: 'user', content: text };
     if (pendingImage) {
       userMsg.image = { mimeType: pendingImage.mimeType, data: pendingImage.data };
     }
-    messages.push(userMsg);
+    convo.messages.push(userMsg);
+
+    if (convo.title === 'Nuevo chat' && text) {
+      convo.title = text.length > 40 ? text.slice(0, 40) + '…' : text;
+    }
+
     input.value = '';
     pendingImage = null;
     renderPreview();
     loading = true;
     render();
-    saveMessages();
+    renderChatList();
+    saveConversations();
 
     const assistantMsg = { role: 'assistant', content: '' };
-    messages.push(assistantMsg);
+    convo.messages.push(assistantMsg);
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: messages.slice(0, -1) })
+        body: JSON.stringify({ messages: convo.messages.slice(0, -1) })
       });
 
       if (!res.ok || !res.body) {
         assistantMsg.content = 'Error de conexión. Intenta de nuevo.';
         loading = false;
         render();
-        saveMessages();
+        saveConversations();
         return;
       }
 
@@ -337,19 +468,37 @@
         assistantMsg.content = 'No pude generar una respuesta.';
         render();
       }
-      saveMessages();
+      saveConversations();
     } catch (e) {
       assistantMsg.content = 'Error de conexión. Intenta de nuevo.';
       loading = false;
       render();
-      saveMessages();
+      saveConversations();
     }
   }
 
   clearBtn.addEventListener('click', () => {
-    messages = [];
-    saveMessages();
+    const convo = getActiveConvo();
+    if (!convo) return;
+    convo.messages = [];
+    convo.title = 'Nuevo chat';
+    saveConversations();
+    renderChatList();
     render();
+  });
+
+  menuBtn.addEventListener('click', () => {
+    renderChatList();
+    overlay.classList.add('open');
+  });
+  closePanelBtn.addEventListener('click', () => overlay.classList.remove('open'));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('open'); });
+
+  newChatBtn.addEventListener('click', () => {
+    createConversation();
+    renderChatList();
+    render();
+    overlay.classList.remove('open');
   });
 
   sendBtn.addEventListener('click', sendMessage);
@@ -360,7 +509,8 @@
     }
   });
 
+  loadConversations();
   render();
 </script>
 </body>
- </html>
+       </html>
