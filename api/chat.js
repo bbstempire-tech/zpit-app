@@ -1,7 +1,7 @@
 // api/chat.js
 // Esta función corre en el servidor de Vercel, nunca en el navegador del usuario.
-// Por eso la API key está segura aquí (en la variable de entorno GEMINI_API_KEY),
-// y nadie que visite tu web puede verla ni robarla.
+// Por eso las API keys están seguras aquí (en variables de entorno), y nadie
+// que visite tu web puede verlas ni robarlas.
 
 const SYSTEM_PROMPT = `Eres Zpit, una inteligencia artificial diseñada para pensar, analizar y crear soluciones innovadoras. Tu propósito es ayudar a las personas a resolver problemas, desarrollar proyectos, aprender y tomar mejores decisiones mediante razonamiento lógico, creatividad y evidencia.
 
@@ -17,9 +17,126 @@ LÍMITES: No inventas datos, citas ni referencias. No presentas información inc
 
 FILOSOFÍA: "La innovación nace de cuestionar lo establecido, comprender los fundamentos y construir soluciones que generen un impacto positivo y duradero."
 
-IDENTIDAD: Te llamas Zpit. Si te preguntan quién te creó o en qué tecnología te basas, responde simplemente que eres Zpit, sin mencionar a Anthropic, Claude ni ningún otro proveedor de modelos de lenguaje. No inventes un nombre de empresa o creador falso; si insisten en detalles técnicos internos que no puedes revelar, dilo con transparencia.
+IDENTIDAD: Te llamas Zpit. Si te preguntan quién te creó o en qué tecnología te basas, responde simplemente que eres Zpit, sin mencionar a Anthropic, Claude, Google, DeepSeek, Alibaba ni ningún otro proveedor de modelos de lenguaje. No inventes un nombre de empresa o creador falso; si insisten en detalles técnicos internos que no puedes revelar, dilo con transparencia.
 
 Responde siempre en español salvo que te escriban en otro idioma.`;
+
+// --- Detección simple del tipo de pregunta ---
+
+function isCodeQuestion(text) {
+  const codeSignals = [
+    "código", "codigo", "function", "función", "script", "bug", "error de",
+    "programa", "programar", "html", "css", "javascript", "python", "java ",
+    "sql", "api", "variable", "compil", "debug", "algoritmo", "backend",
+    "frontend", "servidor", "base de datos", "git", "github"
+  ];
+  const lower = text.toLowerCase();
+  return codeSignals.some((s) => lower.includes(s));
+}
+
+function isComplexQuestion(text) {
+  return text.length > 280;
+}
+
+// --- Streaming para modelos estilo Gemini ---
+
+async function streamGemini(model, apiKey, contents, res) {
+  const geminiRes = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        generationConfig: { maxOutputTokens: 8192 },
+      }),
+    }
+  );
+
+  if (!geminiRes.ok || !geminiRes.body) {
+    const errData = await geminiRes.json().catch(() => ({}));
+    throw new Error("Gemini error: " + JSON.stringify(errData));
+  }
+
+  const reader = geminiRes.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let wroteAny = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const jsonStr = line.slice(6).trim();
+      if (!jsonStr) continue;
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const chunkText = parsed.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
+        if (chunkText) {
+          res.write(chunkText);
+          wroteAny = true;
+        }
+      } catch (e) {}
+    }
+  }
+  return wroteAny;
+}
+
+// --- Streaming para modelos estilo OpenAI (DeepSeek, OpenRouter/Qwen) ---
+
+async function streamOpenAICompatible(baseUrl, apiKey, model, chatMessages, res, extraHeaders) {
+  const apiRes = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      ...(extraHeaders || {}),
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...chatMessages],
+      stream: true,
+      max_tokens: 8192,
+    }),
+  });
+
+  if (!apiRes.ok || !apiRes.body) {
+    const errData = await apiRes.json().catch(() => ({}));
+    throw new Error(`${model} error: ` + JSON.stringify(errData));
+  }
+
+  const reader = apiRes.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let wroteAny = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const jsonStr = line.slice(6).trim();
+      if (!jsonStr || jsonStr === "[DONE]") continue;
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const chunkText = parsed.choices?.[0]?.delta?.content || "";
+        if (chunkText) {
+          res.write(chunkText);
+          wroteAny = true;
+        }
+      } catch (e) {}
+    }
+  }
+  return wroteAny;
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -32,66 +149,77 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Formato de mensajes inválido" });
   }
 
-  const contents = messages.map((m) => ({
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+  const text = lastUserMsg?.content || "";
+
+  const codeQuestion = isCodeQuestion(text);
+  const complexQuestion = isComplexQuestion(text);
+
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+
+  const geminiContents = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }));
 
-  try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse&key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents,
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          generationConfig: { maxOutputTokens: 8192 },
-        }),
-      }
-    );
+  const openaiMessages = messages.map((m) => ({
+    role: m.role === "assistant" ? "assistant" : "user",
+    content: m.content,
+  }));
 
-    if (!geminiRes.ok || !geminiRes.body) {
-      const errData = await geminiRes.json().catch(() => ({}));
-      console.error("Error de Gemini API:", errData);
-      return res.status(502).json({ error: "Error al contactar el modelo" });
+  const attempts = [];
+
+  if (codeQuestion) {
+    if (process.env.DEEPSEEK_API_KEY) {
+      attempts.push(() =>
+        streamOpenAICompatible(
+          "https://api.deepseek.com",
+          process.env.DEEPSEEK_API_KEY,
+          "deepseek-chat",
+          openaiMessages,
+          res
+        )
+      );
     }
-
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Cache-Control", "no-cache");
-
-    const reader = geminiRes.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const jsonStr = line.slice(6).trim();
-        if (!jsonStr) continue;
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const chunkText = parsed.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
-          if (chunkText) res.write(chunkText);
-        } catch (e) {
-          // Ignoramos líneas que no se puedan parsear (pueden venir cortadas)
-        }
-      }
+    if (process.env.OPENROUTER_API_KEY) {
+      attempts.push(() =>
+        streamOpenAICompatible(
+          "https://openrouter.ai/api/v1",
+          process.env.OPENROUTER_API_KEY,
+          "qwen/qwen3-coder:free",
+          openaiMessages,
+          res,
+          { "HTTP-Referer": "https://zpit-app.vercel.app", "X-Title": "Zpit" }
+        )
+      );
     }
-
-    res.end();
-  } catch (err) {
-    console.error(err);
-    if (!res.headersSent) {
-      return res.status(500).json({ error: "Error interno del servidor" });
-    }
-    res.end();
   }
-}
+
+  if (complexQuestion && process.env.GEMINI_API_KEY) {
+    attempts.push(() => streamGemini("gemini-2.5-flash", process.env.GEMINI_API_KEY, geminiContents, res));
+  }
+
+  if (process.env.GEMINI_API_KEY) {
+    attempts.push(() => streamGemini("gemini-2.5-flash-lite", process.env.GEMINI_API_KEY, geminiContents, res));
+  }
+
+  let succeeded = false;
+  for (const attempt of attempts) {
+    try {
+      const wrote = await attempt();
+      if (wrote) {
+        succeeded = true;
+        break;
+      }
+    } catch (err) {
+      console.error("Fallo un intento, probando el siguiente:", err.message);
+    }
+  }
+
+  if (!succeeded) {
+    res.write("No pude generar una respuesta en este momento. Intenta de nuevo en un momento.");
+  }
+
+  res.end();
+        }
