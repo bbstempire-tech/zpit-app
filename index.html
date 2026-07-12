@@ -10,13 +10,13 @@
   body {
     margin: 0;
     min-height: 100vh;
-    background: #0B1220;
+    background: #2E2610;
     background-image:
-      linear-gradient(rgba(62,124,177,0.14) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(62,124,177,0.14) 1px, transparent 1px);
+      linear-gradient(rgba(201,162,39,0.14) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(201,162,39,0.14) 1px, transparent 1px);
     background-size: 24px 24px;
     font-family: 'Inter', system-ui, sans-serif;
-    color: #E8EDF2;
+    color: #F2E9C9;
     display: flex;
     justify-content: center;
     padding: 24px 12px;
@@ -24,45 +24,45 @@
   .mono { font-family: 'JetBrains Mono', monospace; }
   .app { width: 100%; max-width: 640px; display: flex; flex-direction: column; height: 92vh; }
   .header {
-    border: 1px solid #3E7CB1;
+    border: 1px solid #C9A227;
     border-radius: 2px;
     padding: 14px 18px;
     margin-bottom: 14px;
     position: relative;
-    background: rgba(28,43,58,0.55);
+    background: rgba(61,50,24,0.65);
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
-  .corner { position: absolute; width: 8px; height: 8px; border-color: #3E7CB1; }
-  .header .label { font-size: 11px; letter-spacing: 3px; color: #7FA8C9; margin-bottom: 4px; }
+  .corner { position: absolute; width: 8px; height: 8px; border-color: #C9A227; }
+  .header .label { font-size: 11px; letter-spacing: 3px; color: #D9BA5C; margin-bottom: 4px; }
   .header .titlerow { display: flex; align-items: center; gap: 10px; }
-  .header .title { font-size: 26px; font-weight: 700; letter-spacing: 1px; }
+  .header .title { font-size: 26px; font-weight: 700; letter-spacing: 1px; color: #F2E9C9; }
   .clear-btn {
-    background: none; border: 1px solid #3E7CB155; color: #7FA8C9;
+    background: none; border: 1px solid #C9A22755; color: #D9BA5C;
     font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px;
     padding: 4px 8px; border-radius: 2px; cursor: pointer;
   }
-  .status { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #9FD4A3; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #9FD4A3; box-shadow: 0 0 6px #9FD4A3; display: inline-block; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #B7D46A; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #B7D46A; box-shadow: 0 0 6px #B7D46A; display: inline-block; }
   .log {
     flex: 1;
     overflow-y: auto;
-    border: 1px solid #1C2B3A;
+    border: 1px solid #4A3D18;
     border-radius: 2px;
     padding: 16px;
-    background: rgba(11,18,32,0.6);
+    background: rgba(46,38,16,0.6);
     display: flex;
     flex-direction: column;
     gap: 14px;
   }
-  .empty { color: #5A7690; font-size: 13px; text-align: center; margin-top: 40px; }
+  .empty { color: #8A7947; font-size: 13px; text-align: center; margin-top: 40px; }
   .msg-row { display: flex; flex-direction: column; }
   .msg-row.user { align-items: flex-end; }
   .msg-row.assistant { align-items: flex-start; }
   .msg-label { font-size: 10px; letter-spacing: 2px; margin-bottom: 4px; }
-  .msg-label.user { color: #D98E4A; }
-  .msg-label.assistant { color: #7FA8C9; }
+  .msg-label.user { color: #D97D25; }
+  .msg-label.assistant { color: #D9BA5C; }
   .bubble {
     max-width: 88%;
     padding: 10px 14px;
@@ -71,52 +71,79 @@
     line-height: 1.5;
     font-size: 14.5px;
   }
-  .bubble.user { border: 1px solid #D98E4A55; background: rgba(217,142,74,0.08); }
-  .bubble.assistant { border: 1px solid #3E7CB155; background: rgba(62,124,177,0.08); }
-  .thinking { font-size: 12px; color: #7FA8C9; }
-  .input-row { display: flex; gap: 8px; margin-top: 12px; }
+  .bubble.user { border: 1px solid #D97D2555; background: rgba(217,125,37,0.10); }
+  .bubble.assistant { border: 1px solid #C9A22755; background: rgba(201,162,39,0.10); }
+  .bubble img.attached { max-width: 100%; border-radius: 4px; margin-top: 6px; display: block; }
+  .thinking { font-size: 12px; color: #D9BA5C; }
+  .input-row { display: flex; gap: 8px; margin-top: 12px; align-items: flex-end; }
+  .attach-btn {
+    background: rgba(201,162,39,0.12);
+    border: 1px solid #C9A227;
+    border-radius: 2px;
+    color: #D9BA5C;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   textarea {
     flex: 1;
     resize: none;
-    background: rgba(28,43,58,0.55);
-    border: 1px solid #3E7CB1;
+    background: rgba(61,50,24,0.65);
+    border: 1px solid #C9A227;
     border-radius: 2px;
-    color: #E8EDF2;
+    color: #F2E9C9;
     padding: 10px 12px;
     font-family: 'Inter', system-ui, sans-serif;
     font-size: 14.5px;
     outline: none;
   }
-  button {
-    background: #D98E4A;
+  button.send {
+    background: #D97D25;
     border: none;
     border-radius: 2px;
-    color: #0B1220;
+    color: #2E2610;
     font-weight: 700;
     padding: 0 18px;
+    height: 40px;
     cursor: pointer;
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
     letter-spacing: 1px;
   }
   button:disabled { cursor: not-allowed; opacity: 0.6; }
+  .preview-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 8px; padding: 6px 10px;
+    border: 1px solid #C9A22755; border-radius: 2px;
+    background: rgba(201,162,39,0.08); font-size: 12.5px; color: #D9BA5C;
+  }
+  .preview-row img { width: 32px; height: 32px; object-fit: cover; border-radius: 2px; }
+  .preview-row .remove { margin-left: auto; cursor: pointer; color: #D97D25; font-weight: 700; }
   .bubble.assistant h1, .bubble.assistant h2, .bubble.assistant h3 {
-    margin: 12px 0 6px; font-size: 1.05em; color: #E8EDF2;
+    margin: 12px 0 6px; font-size: 1.05em; color: #F2E9C9;
   }
   .bubble.assistant p { margin: 6px 0; }
-  .bubble.assistant strong { color: #9FD4A3; }
+  .bubble.assistant strong { color: #B7D46A; }
   .bubble.assistant ul, .bubble.assistant ol { margin: 6px 0; padding-left: 20px; }
   .bubble.assistant li { margin: 3px 0; }
   .bubble.assistant code {
-    background: rgba(62,124,177,0.15); padding: 2px 5px; border-radius: 2px;
+    background: rgba(201,162,39,0.15); padding: 2px 5px; border-radius: 2px;
     font-family: 'JetBrains Mono', monospace; font-size: 0.9em;
   }
   .bubble.assistant pre {
-    background: rgba(11,18,32,0.8); padding: 10px; border-radius: 2px;
-    overflow-x: auto; border: 1px solid #1C2B3A;
+    background: rgba(46,38,16,0.8); padding: 10px; border-radius: 2px;
+    overflow-x: auto; border: 1px solid #4A3D18;
   }
   .bubble.assistant pre code { background: none; padding: 0; }
-  .bubble.assistant hr { border-color: #1C2B3A; margin: 10px 0; }
+  .bubble.assistant hr { border-color: #4A3D18; margin: 10px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13.5px; }
+  th, td { border: 1px solid #4A3D18; padding: 6px 8px; text-align: left; }
+  th { background: rgba(201,162,39,0.12); }
 </style>
 </head>
 <body>
@@ -140,9 +167,13 @@
       <div class="empty mono">[ SISTEMA LISTO — PLANTEA UN PROBLEMA PARA COMENZAR EL ANÁLISIS ]</div>
     </div>
 
+    <div id="previewArea"></div>
+
     <div class="input-row">
+      <button class="attach-btn" id="attachBtn" title="Adjuntar foto o archivo">📎</button>
+      <input type="file" id="fileInput" accept="image/*,.txt" style="display:none" />
       <textarea id="input" rows="1" placeholder="Escribe tu problema o pregunta..."></textarea>
-      <button id="sendBtn">ENVIAR</button>
+      <button class="send" id="sendBtn">ENVIAR</button>
     </div>
   </div>
 
@@ -151,6 +182,9 @@
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('sendBtn');
   const clearBtn = document.getElementById('clearBtn');
+  const attachBtn = document.getElementById('attachBtn');
+  const fileInput = document.getElementById('fileInput');
+  const previewArea = document.getElementById('previewArea');
   const STORAGE_KEY = 'zpit_messages';
 
   let messages = [];
@@ -162,13 +196,31 @@
   }
 
   let loading = false;
+  let pendingImage = null;
 
   function saveMessages() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-    } catch (e) {
-      // Si el navegador no lo permite, seguimos sin guardar
-    }
+    } catch (e) {}
+  }
+
+  function renderPreview() {
+    previewArea.innerHTML = '';
+    if (!pendingImage) return;
+    const row = document.createElement('div');
+    row.className = 'preview-row mono';
+    const img = document.createElement('img');
+    img.src = pendingImage.previewUrl;
+    const label = document.createElement('span');
+    label.textContent = 'Imagen adjunta';
+    const remove = document.createElement('span');
+    remove.className = 'remove';
+    remove.textContent = '✕';
+    remove.onclick = () => { pendingImage = null; renderPreview(); };
+    row.appendChild(img);
+    row.appendChild(label);
+    row.appendChild(remove);
+    previewArea.appendChild(row);
   }
 
   function render() {
@@ -189,6 +241,12 @@
       } else {
         bubble.textContent = m.content;
       }
+      if (m.image && m.image.data && m.image.mimeType) {
+        const img = document.createElement('img');
+        img.className = 'attached';
+        img.src = `data:${m.image.mimeType};base64,${m.image.data}`;
+        bubble.appendChild(img);
+      }
       row.appendChild(label);
       row.appendChild(bubble);
       log.appendChild(row);
@@ -202,11 +260,45 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  attachBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    fileInput.value = '';
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        const base64 = dataUrl.split(',')[1];
+        pendingImage = { mimeType: file.type, data: base64, previewUrl: dataUrl };
+        renderPreview();
+      };
+      reader.readAsDataURL(file);
+    } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        input.value = (input.value ? input.value + '\n\n' : '') + `[Contenido del archivo ${file.name}]:\n${reader.result}`;
+      };
+      reader.readAsText(file);
+    } else {
+      alert('Por ahora solo se pueden adjuntar imágenes o archivos .txt.');
+    }
+  });
+
   async function sendMessage() {
     const text = input.value.trim();
-    if (!text || loading) return;
-    messages.push({ role: 'user', content: text });
+    if ((!text && !pendingImage) || loading) return;
+
+    const userMsg = { role: 'user', content: text };
+    if (pendingImage) {
+      userMsg.image = { mimeType: pendingImage.mimeType, data: pendingImage.data };
+    }
+    messages.push(userMsg);
     input.value = '';
+    pendingImage = null;
+    renderPreview();
     loading = true;
     render();
     saveMessages();
@@ -271,4 +363,4 @@
   render();
 </script>
 </body>
-</html>
+ </html>
