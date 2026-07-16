@@ -48,9 +48,59 @@ function isComplexQuestion(text) {
   return text.length > 280;
 }
 
+// --- Búsqueda real con Google Custom Search ---
+
+async function googleSearch(query) {
+  const apiKey = process.env.GOOGLE_CSE_API_KEY;
+  const cx = process.env.GOOGLE_CSE_CX;
+  if (!apiKey || !cx || !query || !query.trim()) return [];
+
+  try {
+    const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&num=5&q=${encodeURIComponent(query)}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      const errData = await r.json().catch(() => ({}));
+      console.error("Error de Google CSE:", JSON.stringify(errData));
+      return [];
+    }
+    const data = await r.json();
+    const items = data.items || [];
+    return items.map((it) => ({
+      title: it.title || "",
+      link: it.link || "",
+      snippet: it.snippet || "",
+    }));
+  } catch (e) {
+    console.error("Fallo la búsqueda en Google CSE:", e.message);
+    return [];
+  }
+}
+
+function shouldSearch(text, hasImage, codeQuestion, webSearchEnabled) {
+  if (!webSearchEnabled) return false;
+  if (hasImage) return false;
+  if (codeQuestion) return false;
+  if (!text || text.trim().length < 4) return false;
+  return true;
+}
+
+function buildSearchContext(sources) {
+  if (!sources.length) return "";
+  const lines = sources.map(
+    (s, i) => `${i + 1}. ${s.title}\n   ${s.snippet}\n   Fuente: ${s.link}`
+  );
+  return (
+    "\n\n---\nResultados de una búsqueda web real hecha ahora mismo para la pregunta del usuario. " +
+    "Úsalos para responder con información actual. Menciona de qué fuente sale cada dato relevante " +
+    "(por nombre o dominio). NO inventes datos, enlaces ni fuentes que no aparezcan en esta lista. " +
+    "Si esta información no es suficiente para responder con seguridad, dilo claramente:\n\n" +
+    lines.join("\n\n")
+  );
+}
+
 // --- Streaming para modelos estilo Gemini (soporta imágenes) ---
 
-async function streamGemini(model, apiKey, contents, res) {
+async function streamGemini(model, apiKey, contents, res, systemPrompt) {
   const geminiRes = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`,
     {
@@ -58,7 +108,7 @@ async function streamGemini(model, apiKey, contents, res) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents,
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        systemInstruction: { parts: [{ text: systemPrompt }] },
         generationConfig: { maxOutputTokens: 8192 },
       }),
     }
@@ -99,7 +149,7 @@ async function streamGemini(model, apiKey, contents, res) {
 
 // --- Streaming para modelos estilo OpenAI (DeepSeek, OpenRouter/Qwen) ---
 
-async function streamOpenAICompatible(baseUrl, apiKey, model, chatMessages, res, extraHeaders) {
+async function streamOpenAICompatible(baseUrl, apiKey, model, chatMessages, res, systemPrompt, extraHeaders) {
   const apiRes = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -109,7 +159,7 @@ async function streamOpenAICompatible(baseUrl, apiKey, model, chatMessages, res,
     },
     body: JSON.stringify({
       model,
-      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...chatMessages],
+      messages: [{ role: "system", content: systemPrompt }, ...chatMessages],
       stream: true,
       max_tokens: 8192,
     }),
@@ -153,7 +203,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Método no permitido" });
   }
 
-  const { messages } = req.body;
+  const { messages, webSearchEnabled } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: "Formato de mensajes inválido" });
@@ -168,6 +218,17 @@ export default async function handler(req, res) {
 
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
+
+  let sources = [];
+  if (shouldSearch(text, hasImage, codeQuestion, webSearchEnabled !== false)) {
+    sources = await googleSearch(text);
+  }
+
+  if (sources.length > 0) {
+    res.write("__SOURCES__" + JSON.stringify(sources) + "__ENDSOURCES__\n");
+  }
+
+  const systemPromptFinal = SYSTEM_PROMPT + buildSearchContext(sources);
 
   const geminiContents = messages.map((m) => {
     const parts = [];
@@ -190,8 +251,8 @@ export default async function handler(req, res) {
 
   if (hasImage) {
     if (process.env.GEMINI_API_KEY) {
-      attempts.push(() => streamGemini("gemini-flash-lite-latest", process.env.GEMINI_API_KEY, geminiContents, res));
-      attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
+      attempts.push(() => streamGemini("gemini-flash-lite-latest", process.env.GEMINI_API_KEY, geminiContents, res, systemPromptFinal));
+      attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res, systemPromptFinal));
     }
   } else {
     if (codeQuestion) {
@@ -202,7 +263,8 @@ export default async function handler(req, res) {
             process.env.DEEPSEEK_API_KEY,
             "deepseek-chat",
             openaiMessages,
-            res
+            res,
+            systemPromptFinal
           )
         );
       }
@@ -214,6 +276,7 @@ export default async function handler(req, res) {
             "qwen/qwen3-coder:free",
             openaiMessages,
             res,
+            systemPromptFinal,
             { "HTTP-Referer": "https://zpit-app.vercel.app", "X-Title": "Zpit" }
           )
         );
@@ -221,12 +284,12 @@ export default async function handler(req, res) {
     }
 
     if (complexQuestion && process.env.GEMINI_API_KEY) {
-      attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
+      attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res, systemPromptFinal));
     }
 
     if (process.env.GEMINI_API_KEY) {
-      attempts.push(() => streamGemini("gemini-flash-lite-latest", process.env.GEMINI_API_KEY, geminiContents, res));
-      attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res));
+      attempts.push(() => streamGemini("gemini-flash-lite-latest", process.env.GEMINI_API_KEY, geminiContents, res, systemPromptFinal));
+      attempts.push(() => streamGemini("gemini-flash-latest", process.env.GEMINI_API_KEY, geminiContents, res, systemPromptFinal));
     }
   }
 
