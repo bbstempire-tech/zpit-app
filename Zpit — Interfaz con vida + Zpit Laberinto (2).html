@@ -1,0 +1,2214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Zpit — Unidad de Razonamiento</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #F5F1EA;
+    --surface: #FFFFFF;
+    --surface-alt: #FBF8F2;
+    --text: #3D3929;
+    --text-muted: #8A8270;
+    --border: #E3DDCC;
+    --chip: #F0EBE0;
+    --bubble-user: #EFEAE0;
+    --shadow: rgba(61,57,41,0.08);
+    --overlay-dim: rgba(61,57,41,0.35);
+    --accent: #C96442;
+    --accent-contrast: #FFFFFF;
+    --accent-soft: rgba(201,100,66,0.14);
+  }
+  [data-theme="dark"] {
+    --bg: #1E1C18;
+    --surface: #29261F;
+    --surface-alt: #252219;
+    --text: #EBE5D8;
+    --text-muted: #9C9585;
+    --border: #3B372E;
+    --chip: #333025;
+    --bubble-user: #33301F;
+    --shadow: rgba(0,0,0,0.35);
+    --overlay-dim: rgba(0,0,0,0.55);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 24px 12px;
+  }
+  .mono {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .app { width: 100%; max-width: 640px; display: flex; flex-direction: column; height: 92vh; position: relative; }
+  .header {
+    border: none;
+    border-radius: 16px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    position: relative;
+    background: var(--surface);
+    box-shadow: 0 1px 3px var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header .label { font-size: 10.5px; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 3px; font-weight: 600; }
+  .header .titlerow { display: flex; align-items: center; gap: 10px; }
+  .header .title { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; color: var(--accent); }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .icon-btn {
+    background: var(--bg); border: none; color: var(--text-muted);
+    width: 34px; height: 34px; border-radius: 10px; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s ease, transform 0.12s ease;
+  }
+  .icon-btn:hover { background: var(--accent-soft); }
+  .icon-btn:active { transform: scale(0.88); }
+  .clear-btn {
+    background: none; border: 1px solid var(--border); color: var(--text-muted);
+    font-family: inherit; font-size: 11px; letter-spacing: 0.03em; text-transform: none;
+    padding: 5px 10px; border-radius: 8px; cursor: pointer;
+    transition: transform 0.12s ease, background 0.15s ease;
+  }
+  .clear-btn:active { transform: scale(0.93); }
+  .status { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-muted); text-transform: none; letter-spacing: normal; }
+  .status.search-off { color: var(--text-muted); opacity: 0.75; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #7EA87A; display: inline-block; animation: dot-glow 2.2s ease-in-out infinite; }
+  .status.search-off .dot { background: var(--text-muted); animation: none; }
+  @keyframes dot-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(126,168,122,0.55); }
+    50% { box-shadow: 0 0 0 5px rgba(126,168,122,0); }
+  }
+  .log {
+    flex: 1;
+    overflow-y: auto;
+    border: none;
+    border-radius: 16px;
+    padding: 20px 18px;
+    background: var(--surface);
+    box-shadow: 0 1px 3px var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    scroll-behavior: smooth;
+  }
+  .empty { color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 40px; text-transform: none; letter-spacing: normal; }
+  @keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .msg-row { display: flex; flex-direction: column; animation: msgIn 0.32s cubic-bezier(.2,.8,.2,1); }
+  .msg-row.user { align-items: flex-end; }
+  .msg-row.assistant { align-items: flex-start; }
+  .msg-label { display: none; }
+  .bubble {
+    max-width: 88%;
+    padding: 11px 15px;
+    border-radius: 16px;
+    white-space: pre-wrap;
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  .bubble.user { background: var(--accent-soft); color: var(--text); border-bottom-right-radius: 4px; cursor: pointer; transition: filter 0.15s ease; }
+  .bubble.user:active { filter: brightness(0.96); }
+  .bubble.assistant { background: transparent; color: var(--text); padding: 4px 2px; max-width: 100%; border-bottom-left-radius: 4px; }
+  .bubble img.attached { max-width: 100%; border-radius: 10px; margin-top: 6px; display: block; }
+  .thinking { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 10px; text-transform: none; letter-spacing: normal; animation: msgIn 0.25s ease-out; }
+  .typing-dots { display: flex; align-items: center; gap: 4px; }
+  .typing-dots span {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    display: inline-block; animation: dot-bounce 1.2s infinite ease-in-out;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes dot-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+    30% { transform: translateY(-5px); opacity: 1; }
+  }
+  .input-row { display: flex; gap: 8px; margin-top: 12px; align-items: flex-end; }
+  .attach-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-muted);
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    cursor: pointer;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.12s ease, background 0.15s ease;
+  }
+  .attach-btn:active { transform: scale(0.9); }
+  textarea {
+    flex: 1;
+    resize: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    padding: 11px 14px;
+    font-family: inherit;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  button.send {
+    background: var(--accent);
+    border: none;
+    border-radius: 12px;
+    color: var(--accent-contrast);
+    font-weight: 600;
+    padding: 0 20px;
+    height: 42px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13.5px;
+    letter-spacing: normal;
+    text-transform: none;
+    transition: transform 0.12s ease, filter 0.15s ease;
+  }
+  button.send:active:not(:disabled) { transform: scale(0.95); filter: brightness(0.94); }
+  button:disabled { cursor: not-allowed; opacity: 0.6; }
+  .preview-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 8px; padding: 7px 12px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); font-size: 12.5px; color: var(--text-muted);
+    text-transform: none; letter-spacing: normal;
+  }
+  .preview-row img { width: 32px; height: 32px; object-fit: cover; border-radius: 6px; }
+  .preview-row .remove { margin-left: auto; cursor: pointer; color: var(--accent); font-weight: 700; }
+  .bubble.assistant h1, .bubble.assistant h2, .bubble.assistant h3 {
+    margin: 14px 0 6px; font-size: 1.08em; color: var(--text); font-weight: 650;
+  }
+  .bubble.assistant p { margin: 8px 0; }
+  .bubble.assistant strong { color: var(--text); font-weight: 650; }
+  .bubble.assistant ul, .bubble.assistant ol { margin: 8px 0; padding-left: 22px; }
+  .bubble.assistant li { margin: 4px 0; }
+  .bubble.assistant code {
+    background: var(--chip); padding: 2px 6px; border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.88em; color: var(--accent);
+  }
+  .bubble.assistant pre {
+    background: var(--bg); padding: 12px 14px; border-radius: 10px;
+    overflow-x: auto; border: 1px solid var(--border);
+  }
+  .bubble.assistant pre code { background: none; padding: 0; color: var(--text); }
+  .bubble.assistant hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13.5px; border-radius: 8px; overflow: hidden; }
+  th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+  th { background: var(--chip); font-weight: 650; }
+
+  /* Panel de chats */
+  .overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--overlay-dim);
+    display: none;
+    z-index: 10;
+  }
+  .overlay.open { display: block; }
+  .chat-panel {
+    position: absolute; top: 0; left: 0; bottom: 0;
+    width: 82%; max-width: 320px;
+    background: var(--surface-alt);
+    border-right: none;
+    box-shadow: 2px 0 12px var(--shadow);
+    display: flex; flex-direction: column;
+    padding: 18px 14px;
+    animation: slideIn 0.22s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes slideIn { from { transform: translateX(-14px); opacity: 0.4; } to { transform: translateX(0); opacity: 1; } }
+  .chat-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .new-chat-btn {
+    background: var(--accent); border: none; color: var(--accent-contrast); font-weight: 600;
+    border-radius: 10px; padding: 10px 12px; font-family: inherit;
+    font-size: 13px; cursor: pointer; width: 100%; margin-bottom: 12px;
+    text-transform: none; letter-spacing: normal;
+    transition: transform 0.12s ease, filter 0.15s ease;
+  }
+  .new-chat-btn:active { transform: scale(0.96); filter: brightness(0.95); }
+  .chat-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .chat-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 9px 11px; border-radius: 10px; cursor: pointer;
+    border: none; color: var(--text-muted); font-size: 13.5px;
+    transition: transform 0.1s ease, background 0.15s ease;
+  }
+  .chat-item:active { transform: scale(0.98); }
+  .chat-item.active { background: var(--accent-soft); color: var(--text); }
+  .chat-item span.title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-item .del { color: var(--accent); font-weight: 700; padding: 0 4px; }
+
+  /* Panel de minijuegos */
+  .games-panel {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--surface-alt);
+    display: flex; flex-direction: column;
+    padding: 18px 16px;
+    overflow-y: auto;
+  }
+  .game-card {
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px; margin-top: 10px; cursor: pointer;
+    background: var(--surface);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .game-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px var(--shadow); }
+  .game-card:active { transform: translateY(0) scale(0.98); }
+  .game-card-title { font-size: 16px; font-weight: 650; color: var(--text); }
+  .game-card-desc { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; }
+  .game-card-best { font-size: 11px; color: #7EA87A; margin-top: 8px; text-transform: none; letter-spacing: normal; }
+  #gameCanvas {
+    width: 100%; max-height: 55vh; aspect-ratio: 16/9;
+    background: #221c0c; border: 1px solid var(--border); border-radius: 14px;
+    display: block; margin-top: 10px; touch-action: none;
+  }
+  .game-hud {
+    display: flex; justify-content: space-between; margin-top: 8px;
+    font-size: 12px; color: var(--text-muted); text-transform: none; letter-spacing: normal;
+  }
+  .game-over-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 22px 28px; text-align: center; color: var(--text); font-size: 16px;
+    box-shadow: 0 4px 16px var(--shadow);
+    animation: popIn 0.22s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes popIn { from { opacity: 0; transform: translate(-50%,-50%) scale(0.9); } to { opacity: 1; transform: translate(-50%,-50%) scale(1); } }
+  .game-over-box .new-chat-btn { margin-top: 12px; }
+  #geoDashGame { position: relative; }
+  .milestone-toast {
+    position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: var(--accent-contrast); font-weight: 650;
+    padding: 8px 18px; border-radius: 10px; font-size: 15px;
+    animation: toast-pop 1.1s ease-out forwards;
+    pointer-events: none;
+  }
+  @keyframes toast-pop {
+    0% { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.9); }
+    20% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.05); }
+    80% { opacity: 1; }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(1); }
+  }
+
+  /* Panel de ajustes (tema y color) */
+  .settings-panel {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--surface-alt);
+    display: flex; flex-direction: column;
+    padding: 18px 16px;
+  }
+  .settings-section { margin-top: 18px; }
+  .settings-section-title { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .mode-row { display: flex; gap: 8px; }
+  .mode-btn {
+    flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: transform 0.12s ease, background 0.15s ease;
+  }
+  .mode-btn:active { transform: scale(0.96); }
+  .mode-btn.active { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+  .swatch-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .swatch {
+    width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: #fff; transition: transform 0.15s ease;
+  }
+  .swatch:hover { transform: scale(1.08); }
+  .swatch:active { transform: scale(0.92); }
+  .swatch.active { border-color: var(--text); }
+
+  /* Edición de mensajes */
+  .edit-wrap { width: 100%; max-width: 88%; align-self: flex-end; }
+  .edit-textarea {
+    width: 100%; resize: vertical; min-height: 60px;
+    background: var(--surface); border: 1px solid var(--accent); border-radius: 12px;
+    color: var(--text); padding: 10px 12px; font-family: inherit; font-size: 14.5px; outline: none;
+  }
+  .edit-btn-row { display: flex; gap: 8px; margin-top: 6px; justify-content: flex-end; }
+  .edit-cancel-btn, .edit-save-btn {
+    border: none; border-radius: 8px; padding: 7px 12px; font-family: inherit;
+    font-size: 12.5px; cursor: pointer; transition: transform 0.12s ease;
+  }
+  .edit-cancel-btn:active, .edit-save-btn:active { transform: scale(0.95); }
+  .edit-cancel-btn { background: var(--chip); color: var(--text-muted); }
+  .edit-save-btn { background: var(--accent); color: var(--accent-contrast); font-weight: 600; }
+
+  /* Menú "+" (adjuntar / búsqueda web) */
+  .attach-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--overlay-dim);
+    display: none;
+    z-index: 20;
+  }
+  .attach-overlay.open { display: block; }
+  .attach-menu {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: var(--surface-alt);
+    border-top: none;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -2px 12px var(--shadow);
+    padding: 18px 16px;
+    animation: slideUp 0.22s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes slideUp { from { transform: translateY(14px); opacity: 0.4; } to { transform: translateY(0); opacity: 1; } }
+  .attach-menu-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px; font-size: 12px; letter-spacing: 0.06em; color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .attach-options { display: flex; gap: 12px; margin-bottom: 16px; }
+  .attach-option {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 6px; border: none; border-radius: 14px;
+    background: transparent; cursor: pointer; color: var(--text);
+    font-size: 12px; letter-spacing: 0.01em; text-transform: none;
+    transition: transform 0.12s ease;
+  }
+  .attach-option:active { transform: scale(0.93); }
+  .attach-option .icon-circle {
+    width: 46px; height: 46px; border-radius: 50%;
+    background: var(--chip); display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s ease;
+  }
+  .attach-option:hover .icon-circle { background: var(--accent-soft); }
+  .attach-option svg { width: 20px; height: 20px; stroke: var(--text); fill: none; }
+  .search-toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px; border: none; border-radius: 14px;
+    background: transparent;
+  }
+  .search-toggle-label { display: flex; align-items: center; gap: 12px; font-size: 14.5px; color: var(--text); }
+  .search-toggle-label .icon-circle {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--chip); display: flex; align-items: center; justify-content: center;
+  }
+  .search-toggle-label svg { width: 18px; height: 18px; stroke: var(--text); fill: none; }
+  .toggle-switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--chip); border-radius: 24px; transition: 0.2s;
+  }
+  .toggle-slider::before {
+    content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background: var(--surface); box-shadow: 0 1px 2px var(--shadow); border-radius: 50%; transition: 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
+  .source-chip {
+    font-size: 11.5px; color: var(--text-muted); background: var(--chip);
+    padding: 4px 9px; border-radius: 8px; text-decoration: none;
+  }
+
+  /* ===== Zpit Laberinto (Pac-Man) fullscreen ===== */
+  .pacman-fullscreen {
+    position: fixed; inset: 0; background: #000; z-index: 500;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    touch-action: none;
+  }
+  .pacman-hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; color: #fff; font-size: 12px; letter-spacing: 0.05em;
+    z-index: 2;
+  }
+  .pacman-hud .icon-btn { background: rgba(255,255,255,0.08); color: #fff; }
+  .pacman-hud .icon-btn:hover { background: rgba(255,255,255,0.16); }
+  #pacmanCanvas {
+    width: min(92vw, 92vh, 460px);
+    height: min(92vw, 92vh, 460px);
+    background: #05050a;
+    border-radius: 8px;
+    box-shadow: 0 0 30px rgba(41,84,255,0.25);
+  }
+  .pacman-touch-controls {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px);
+    gap: 4px; z-index: 2;
+  }
+  .pac-btn {
+    background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 12px; color: #fff; font-size: 20px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform 0.1s ease, background 0.15s ease;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+  }
+  .pac-btn:active { transform: scale(0.88); background: rgba(255,255,255,0.22); }
+  #pacUp { grid-column: 2; grid-row: 1; }
+  #pacLeft { grid-column: 1; grid-row: 2; }
+  #pacRight { grid-column: 3; grid-row: 2; }
+  #pacDown { grid-column: 2; grid-row: 3; }
+  .pacman-over-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    background: #14141c; border: 1px solid rgba(255,255,255,0.15); border-radius: 16px;
+    padding: 26px 32px; text-align: center; color: #fff; font-size: 17px;
+    z-index: 3; animation: popIn 0.22s cubic-bezier(.2,.8,.2,1);
+  }
+  @media (max-width: 480px) {
+    .pacman-touch-controls { display: grid; }
+  }
+
+  /* ===== Estado emocional / Memoria / Estadísticas / Logros ===== */
+  .overlay.open { animation: overlayFade 0.2s ease; }
+  @keyframes overlayFade { from { opacity: 0; } to { opacity: 1; } }
+
+  .emotion-bar-wrap { margin-bottom: 14px; background: var(--surface); border-radius: 16px; padding: 12px 16px; box-shadow: 0 1px 3px var(--shadow); }
+  .emotion-bar-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .emotion-row { display: flex; align-items: center; gap: 8px; margin-top: 9px; font-size: 12px; color: var(--text-muted); }
+  .emotion-row .emotion-label { width: 108px; flex-shrink: 0; text-transform: none; letter-spacing: normal; }
+  .emotion-track { flex: 1; height: 6px; background: var(--chip); border-radius: 4px; overflow: hidden; }
+  .emotion-fill { height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(.2,.8,.2,1); display: block; }
+  .emotion-pct { width: 34px; text-align: right; flex-shrink: 0; }
+
+  .memory-item { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-top: 8px; background: var(--surface); display: flex; gap: 8px; align-items: flex-start; animation: msgIn 0.25s ease-out; }
+  .memory-item .memory-text { flex: 1; font-size: 13.5px; color: var(--text); }
+  .memory-item .memory-auto-badge { font-size: 9px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 4px; }
+  .memory-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .memory-actions button { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; transition: transform 0.12s ease; }
+  .memory-actions button:active { transform: scale(0.85); }
+  .memory-add-row { display: flex; gap: 8px; margin-top: 4px; }
+  .memory-add-row input { flex: 1; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 13.5px; outline: none; }
+  .memory-add-row input:focus { border-color: var(--accent); }
+
+  .stats-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 11px 14px; font-size: 13.5px; }
+  .stat-row .stat-value { font-weight: 650; color: var(--accent); }
+
+  .achv-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .achv-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--surface); opacity: 0.4; transition: opacity 0.3s ease, transform 0.3s ease; }
+  .achv-item.unlocked { opacity: 1; }
+  .achv-icon { font-size: 20px; flex-shrink: 0; }
+  .achv-text { flex: 1; font-size: 12.5px; line-height: 1.5; }
+  .achv-text .achv-name { font-weight: 650; color: var(--text); }
+  .achv-text .achv-desc { color: var(--text-muted); font-size: 11px; }
+
+  .achv-toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%) translateY(-24px); background: var(--surface); border: 1px solid var(--accent); border-radius: 14px; padding: 12px 20px; display: flex; align-items: center; gap: 10px; box-shadow: 0 6px 20px var(--shadow); z-index: 1000; opacity: 0; pointer-events: none; transition: transform 0.4s cubic-bezier(.2,.8,.2,1), opacity 0.4s ease; max-width: 90vw; }
+  .achv-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .achv-toast-icon { font-size: 24px; }
+  .achv-toast-title { font-size: 10.5px; color: var(--text-muted); letter-spacing: 0.05em; }
+  .achv-toast-name { font-size: 14px; font-weight: 650; color: var(--text); }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="header-left">
+        <button class="icon-btn" id="menuBtn" title="Tus chats">☰</button>
+        <button class="icon-btn" id="gamesBtn" title="Minijuegos">🎮</button>
+        <button class="icon-btn" id="memoryBtn" title="Memoria">🧠</button>
+        <button class="icon-btn" id="statsBtn" title="Estadísticas y logros">📊</button>
+        <button class="icon-btn" id="settingsBtn" title="Ajustes">🎨</button>
+        <div>
+          <div class="label mono">UNIDAD DE RAZONAMIENTO</div>
+          <div class="titlerow">
+            <div class="title">ZPIT</div>
+            <button class="clear-btn" id="clearBtn">BORRAR</button>
+          </div>
+        </div>
+      </div>
+      <div class="status mono" id="statusIndicator"><span class="dot"></span><span id="statusText">EN LÍNEA</span></div>
+    </div>
+
+    <div class="emotion-bar-wrap" id="emotionWrap">
+      <div class="emotion-bar-header" id="emotionToggle">
+        <span class="mono" style="font-size:11px;letter-spacing:0.05em;color:var(--text-muted);">🧠 ESTADO EMOCIONAL</span>
+        <span class="mono" id="emotionCollapseIcon" style="font-size:11px;color:var(--text-muted);">▾</span>
+      </div>
+      <div id="emotionRows"></div>
+    </div>
+
+    <div class="log" id="log">
+      <div class="empty mono">[ SISTEMA LISTO — PLANTEA UN PROBLEMA PARA COMENZAR EL ANÁLISIS ]</div>
+    </div>
+
+    <div id="previewArea"></div>
+
+    <div class="input-row">
+      <button class="attach-btn" id="attachBtn" title="Adjuntar / opciones">+</button>
+      <input type="file" id="fileInput" accept="image/*,.txt" style="display:none" />
+      <textarea id="input" rows="1" placeholder="Escribe tu problema o pregunta..."></textarea>
+      <button class="send" id="sendBtn">ENVIAR</button>
+    </div>
+
+    <div class="overlay" id="overlay">
+      <div class="chat-panel">
+        <div class="chat-panel-header">
+          <div class="mono" style="font-size:12px;letter-spacing:2px;color:var(--text-muted);">TUS CHATS</div>
+          <button class="icon-btn" id="closePanelBtn">✕</button>
+        </div>
+        <button class="new-chat-btn" id="newChatBtn">+ NUEVO CHAT</button>
+        <div class="chat-list" id="chatList"></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="gamesOverlay">
+      <div class="games-panel">
+        <div class="chat-panel-header">
+          <div class="mono" style="font-size:12px;letter-spacing:2px;color:var(--text-muted);" id="gamesTitle">MINIJUEGOS</div>
+          <button class="icon-btn" id="closeGamesBtn">✕</button>
+        </div>
+
+        <div id="gamesList">
+          <div class="game-card" id="geoDashCard">
+            <div class="game-card-title">▲ Zpit Dash</div>
+            <div class="game-card-desc">Esquiva los picos. Toca o presiona espacio para saltar.</div>
+            <div class="game-card-best mono" id="geoDashBest">Mejor puntaje: 0</div>
+          </div>
+
+          <div class="game-card" id="pacmanCard">
+            <div class="game-card-title">👻 Zpit Laberinto</div>
+            <div class="game-card-desc">El clásico come-puntos, a pantalla completa. Flechas o D-pad táctil.</div>
+            <div class="game-card-best mono" id="pacmanBest">Mejor puntaje: 0</div>
+          </div>
+        </div>
+
+        <div id="geoDashGame" style="display:none;">
+          <button class="icon-btn" id="backToGamesBtn" style="margin-bottom:10px;">←</button>
+          <canvas id="gameCanvas"></canvas>
+          <div class="game-hud mono">
+            <span id="scoreLabel">PUNTAJE: 0</span>
+            <span id="bestLabel">MEJOR: 0</span>
+          </div>
+          <div id="milestoneToast" class="milestone-toast mono" style="display:none;"></div>
+          <div id="gameOverBox" class="game-over-box mono" style="display:none;">
+            <div>GAME OVER</div>
+            <button class="new-chat-btn" id="retryBtn">REINTENTAR</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="settingsOverlay">
+      <div class="settings-panel">
+        <div class="chat-panel-header">
+          <div class="mono" style="font-size:12px;letter-spacing:2px;color:var(--text-muted);">AJUSTES</div>
+          <button class="icon-btn" id="closeSettingsBtn">✕</button>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Apariencia</div>
+          <div class="mode-row">
+            <button class="mode-btn" id="lightModeBtn">☀️ Claro</button>
+            <button class="mode-btn" id="darkModeBtn">🌙 Oscuro</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Color de Zpit</div>
+          <div class="swatch-row" id="swatchRow"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="attach-overlay" id="attachOverlay">
+      <div class="attach-menu">
+        <div class="attach-menu-header">
+          <span>Añadir al chat</span>
+          <button class="icon-btn" id="closeAttachBtn">✕</button>
+        </div>
+        <div class="attach-options">
+          <div class="attach-option" id="cameraOption">
+            <span class="icon-circle"><svg viewBox="0 0 24 24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 0 1 2-2h1.2l.8-1.6A1 1 0 0 1 8.9 4h6.2a1 1 0 0 1 .9.6L16.8 6H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
+            <span>Cámara</span>
+          </div>
+          <div class="attach-option" id="photosOption">
+            <span class="icon-circle"><svg viewBox="0 0 24 24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M20.5 15 15 10l-4 4-2.5-2.5-5 5"/></svg></span>
+            <span>Fotos</span>
+          </div>
+          <div class="attach-option" id="filesOption">
+            <span class="icon-circle"><svg viewBox="0 0 24 24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4v13a1.2 1.2 0 0 1-1.2 1.2H7A1.2 1.2 0 0 1 5.8 20.5V4.7A1.2 1.2 0 0 1 7 3.5z"/><path d="M14 3.5V8h4"/></svg></span>
+            <span>Archivos</span>
+          </div>
+        </div>
+        <div class="search-toggle-row">
+          <div class="search-toggle-label">
+            <span class="icon-circle"><svg viewBox="0 0 24 24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.2 2.3 3.4 5.3 3.4 8.5s-1.2 6.2-3.4 8.5c-2.2-2.3-3.4-5.3-3.4-8.5S9.8 5.8 12 3.5z"/></svg></span>
+            <span>Búsqueda web</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="webSearchToggle" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ZPIT LABERINTO — pantalla completa -->
+    <div class="pacman-fullscreen" id="pacmanFullscreen">
+      <div class="pacman-hud mono">
+        <button class="icon-btn" id="pacmanBackBtn">←</button>
+        <span id="pacmanScoreLabel">PUNTAJE: 0</span>
+        <span id="pacmanLivesLabel">VIDAS: ●●●</span>
+      </div>
+      <canvas id="pacmanCanvas" width="420" height="420"></canvas>
+      <div class="pacman-touch-controls">
+        <div class="pac-btn" id="pacUp">▲</div>
+        <div class="pac-btn" id="pacLeft">◀</div>
+        <div class="pac-btn" id="pacRight">▶</div>
+        <div class="pac-btn" id="pacDown">▼</div>
+      </div>
+      <div class="pacman-over-box mono" id="pacmanOverBox" style="display:none;">
+        <div id="pacmanOverText">GAME OVER</div>
+        <button class="new-chat-btn" id="pacmanRetryBtn">REINTENTAR</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="memoryOverlay">
+      <div class="games-panel">
+        <div class="chat-panel-header">
+          <div class="mono" style="font-size:12px;letter-spacing:2px;color:var(--text-muted);">MEMORIA</div>
+          <button class="icon-btn" id="closeMemoryBtn">✕</button>
+        </div>
+        <div class="memory-add-row">
+          <input type="text" id="memoryInput" placeholder="Agregar un recuerdo..." />
+          <button class="new-chat-btn" id="memoryAddBtn" style="width:auto;margin:0;padding:0 16px;">AGREGAR</button>
+        </div>
+        <div id="memoryList"></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="statsOverlay">
+      <div class="games-panel">
+        <div class="chat-panel-header">
+          <div class="mono" style="font-size:12px;letter-spacing:2px;color:var(--text-muted);">ESTADÍSTICAS Y LOGROS</div>
+          <button class="icon-btn" id="closeStatsBtn">✕</button>
+        </div>
+        <div class="settings-section-title mono" style="margin-top:4px;">ESTADÍSTICAS</div>
+        <div class="stats-grid" id="statsGrid"></div>
+        <div class="settings-section-title mono" style="margin-top:20px;">LOGROS</div>
+        <div class="achv-grid" id="achvGrid"></div>
+      </div>
+    </div>
+
+    <div class="achv-toast mono" id="achvToast"></div>
+  </div>
+
+<script>
+  const log = document.getElementById('log');
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('sendBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const attachBtn = document.getElementById('attachBtn');
+  const fileInput = document.getElementById('fileInput');
+  const previewArea = document.getElementById('previewArea');
+  const menuBtn = document.getElementById('menuBtn');
+  const closePanelBtn = document.getElementById('closePanelBtn');
+  const overlay = document.getElementById('overlay');
+  const newChatBtn = document.getElementById('newChatBtn');
+  const chatList = document.getElementById('chatList');
+  const statusIndicator = document.getElementById('statusIndicator');
+  const statusText = document.getElementById('statusText');
+
+  const CONVOS_KEY = 'zpit_conversations';
+  const ACTIVE_KEY = 'zpit_active_id';
+  const WEB_SEARCH_KEY = 'zpit_web_search_enabled';
+
+  let conversations = [];
+  let activeId = null;
+  let loading = false;
+  let searching = false;
+  let pendingImage = null;
+  let editingIndex = null;
+  let webSearchEnabled = true;
+
+  function loadConversations() {
+    try {
+      const saved = localStorage.getItem(CONVOS_KEY);
+      conversations = saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      conversations = [];
+    }
+    activeId = localStorage.getItem(ACTIVE_KEY);
+
+    if (conversations.length === 0) {
+      createConversation();
+    } else if (!activeId || !conversations.find((c) => c.id === activeId)) {
+      activeId = conversations[0].id;
+    }
+  }
+
+  function loadWebSearchSetting() {
+    try {
+      const saved = localStorage.getItem(WEB_SEARCH_KEY);
+      webSearchEnabled = saved === null ? true : saved === 'true';
+    } catch (e) {
+      webSearchEnabled = true;
+    }
+    updateSearchUI();
+  }
+
+  function updateSearchUI() {
+    const toggle = document.getElementById('webSearchToggle');
+    if (toggle) toggle.checked = webSearchEnabled;
+    if (webSearchEnabled) {
+      statusIndicator.classList.remove('search-off');
+      statusText.textContent = 'EN LÍNEA';
+    } else {
+      statusIndicator.classList.add('search-off');
+      statusText.textContent = 'BÚSQUEDA WEB APAGADA';
+    }
+  }
+
+  function saveConversations() {
+    try {
+      localStorage.setItem(CONVOS_KEY, JSON.stringify(conversations));
+      localStorage.setItem(ACTIVE_KEY, activeId);
+    } catch (e) {}
+  }
+
+  function getActiveConvo() {
+    return conversations.find((c) => c.id === activeId);
+  }
+
+  function createConversation() {
+    const convo = { id: 'c_' + Date.now(), title: 'Nuevo chat', messages: [] };
+    conversations.unshift(convo);
+    activeId = convo.id;
+    saveConversations();
+  }
+
+  function switchConversation(id) {
+    activeId = id;
+    editingIndex = null;
+    saveConversations();
+    renderChatList();
+    render();
+    overlay.classList.remove('open');
+  }
+
+  function deleteConversation(id, e) {
+    e.stopPropagation();
+    conversations = conversations.filter((c) => c.id !== id);
+    if (conversations.length === 0) {
+      createConversation();
+    } else if (activeId === id) {
+      activeId = conversations[0].id;
+    }
+    saveConversations();
+    renderChatList();
+    render();
+  }
+
+  function renderChatList() {
+    chatList.innerHTML = '';
+    for (const c of conversations) {
+      const item = document.createElement('div');
+      item.className = 'chat-item' + (c.id === activeId ? ' active' : '');
+      const title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = c.title || 'Nuevo chat';
+      const del = document.createElement('span');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.onclick = (e) => deleteConversation(c.id, e);
+      item.appendChild(title);
+      item.appendChild(del);
+      item.onclick = () => switchConversation(c.id);
+      chatList.appendChild(item);
+    }
+  }
+
+  function renderPreview() {
+    previewArea.innerHTML = '';
+    if (!pendingImage) return;
+    const row = document.createElement('div');
+    row.className = 'preview-row mono';
+    const img = document.createElement('img');
+    img.src = pendingImage.previewUrl;
+    const label = document.createElement('span');
+    label.textContent = 'Imagen adjunta';
+    const remove = document.createElement('span');
+    remove.className = 'remove';
+    remove.textContent = '✕';
+    remove.onclick = () => { pendingImage = null; renderPreview(); };
+    row.appendChild(img);
+    row.appendChild(label);
+    row.appendChild(remove);
+    previewArea.appendChild(row);
+  }
+
+  function render() {
+    const convo = getActiveConvo();
+    const messages = convo ? convo.messages : [];
+    log.innerHTML = '';
+    if (messages.length === 0) {
+      log.innerHTML = '<div class="empty mono">[ SISTEMA LISTO — PLANTEA UN PROBLEMA PARA COMENZAR EL ANÁLISIS ]</div>';
+    }
+    messages.forEach((m, i) => {
+      const row = document.createElement('div');
+      row.className = 'msg-row ' + m.role;
+      const label = document.createElement('div');
+      label.className = 'msg-label mono ' + m.role;
+      label.textContent = m.role === 'user' ? 'TÚ (toca para editar)' : 'ZPIT · SALIDA';
+
+      if (m.role === 'user' && i === editingIndex) {
+        const editWrap = document.createElement('div');
+        editWrap.className = 'edit-wrap';
+        const ta = document.createElement('textarea');
+        ta.className = 'edit-textarea';
+        ta.value = m.content;
+        const btnRow = document.createElement('div');
+        btnRow.className = 'edit-btn-row';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'edit-cancel-btn';
+        cancelBtn.textContent = 'Cancelar';
+        cancelBtn.onclick = () => { editingIndex = null; render(); };
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'edit-save-btn';
+        saveBtn.textContent = 'Guardar y regenerar';
+        saveBtn.onclick = () => saveEdit(i, ta.value);
+        btnRow.appendChild(cancelBtn);
+        btnRow.appendChild(saveBtn);
+        editWrap.appendChild(ta);
+        editWrap.appendChild(btnRow);
+        row.appendChild(label);
+        row.appendChild(editWrap);
+        log.appendChild(row);
+        return;
+      }
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble ' + m.role;
+      if (m.role === 'assistant' && window.marked) {
+        bubble.innerHTML = marked.parse(m.content || '');
+      } else {
+        bubble.textContent = m.content;
+      }
+      if (m.image && m.image.data && m.image.mimeType) {
+        const img = document.createElement('img');
+        img.className = 'attached';
+        img.src = `data:${m.image.mimeType};base64,${m.image.data}`;
+        bubble.appendChild(img);
+      }
+      if (m.role === 'user') {
+        bubble.onclick = () => {
+          if (loading) return;
+          editingIndex = i;
+          render();
+        };
+      }
+      row.appendChild(label);
+      row.appendChild(bubble);
+
+      if (m.role === 'assistant' && m.sources && m.sources.length > 0) {
+        const sourcesBox = document.createElement('div');
+        sourcesBox.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;';
+        m.sources.forEach((s) => {
+          const chip = document.createElement('a');
+          chip.href = s.link;
+          chip.target = '_blank';
+          chip.rel = 'noopener noreferrer';
+          chip.className = 'source-chip';
+          chip.title = s.title;
+          chip.textContent = (() => {
+            try { return new URL(s.link).hostname.replace('www.', ''); }
+            catch (e) { return s.title; }
+          })();
+          sourcesBox.appendChild(chip);
+        });
+        row.appendChild(sourcesBox);
+      }
+
+      log.appendChild(row);
+    });
+    if (loading) {
+      const p = document.createElement('div');
+      p.className = 'thinking mono';
+      const dots = document.createElement('span');
+      dots.className = 'typing-dots';
+      dots.innerHTML = '<span></span><span></span><span></span>';
+      const label = document.createElement('span');
+      label.textContent = searching ? 'ZPIT está buscando en la web…' : 'ZPIT está pensando…';
+      p.appendChild(dots);
+      p.appendChild(label);
+      log.appendChild(p);
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // ================= MENÚ "+" (adjuntar / búsqueda web) =================
+  const attachOverlay = document.getElementById('attachOverlay');
+  const closeAttachBtn = document.getElementById('closeAttachBtn');
+  const cameraOption = document.getElementById('cameraOption');
+  const photosOption = document.getElementById('photosOption');
+  const filesOption = document.getElementById('filesOption');
+  const webSearchToggle = document.getElementById('webSearchToggle');
+
+  attachBtn.addEventListener('click', () => attachOverlay.classList.add('open'));
+  closeAttachBtn.addEventListener('click', () => attachOverlay.classList.remove('open'));
+  attachOverlay.addEventListener('click', (e) => { if (e.target === attachOverlay) attachOverlay.classList.remove('open'); });
+
+  cameraOption.addEventListener('click', () => {
+    fileInput.setAttribute('capture', 'environment');
+    fileInput.accept = 'image/*';
+    fileInput.click();
+    attachOverlay.classList.remove('open');
+  });
+  photosOption.addEventListener('click', () => {
+    fileInput.removeAttribute('capture');
+    fileInput.accept = 'image/*';
+    fileInput.click();
+    attachOverlay.classList.remove('open');
+  });
+  filesOption.addEventListener('click', () => {
+    fileInput.removeAttribute('capture');
+    fileInput.accept = '.txt,text/plain,image/*';
+    fileInput.click();
+    attachOverlay.classList.remove('open');
+  });
+
+  webSearchToggle.addEventListener('change', () => {
+    webSearchEnabled = webSearchToggle.checked;
+    try { localStorage.setItem(WEB_SEARCH_KEY, String(webSearchEnabled)); } catch (e) {}
+    updateSearchUI();
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    fileInput.value = '';
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        const base64 = dataUrl.split(',')[1];
+        pendingImage = { mimeType: file.type, data: base64, previewUrl: dataUrl };
+        renderPreview();
+      };
+      reader.readAsDataURL(file);
+    } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        input.value = (input.value ? input.value + '\n\n' : '') + `[Contenido del archivo ${file.name}]:\n${reader.result}`;
+      };
+      reader.readAsText(file);
+    } else {
+      alert('Por ahora solo se pueden adjuntar imágenes o archivos .txt.');
+    }
+  });
+
+  async function streamAssistantReply(convo, assistantMsg) {
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: convo.messages.slice(0, -1),
+          webSearchEnabled: webSearchEnabled,
+          memories: (typeof window.zpitGetMemories === 'function') ? window.zpitGetMemories() : [],
+          emotion: (typeof window.zpitGetEmotion === 'function') ? window.zpitGetEmotion() : null
+        })
+      });
+
+      if (!res.ok || !res.body) {
+        assistantMsg.content = 'Error de conexión. Intenta de nuevo.';
+        loading = false;
+        searching = false;
+        render();
+        saveConversations();
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let raw = '';
+      let sourcesParsed = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+
+        if (!sourcesParsed) {
+          const match = raw.match(/^__SOURCES__([\s\S]*?)__ENDSOURCES__\n/);
+          if (match) {
+            try {
+              assistantMsg.sources = JSON.parse(match[1]);
+            } catch (e) {
+              assistantMsg.sources = [];
+            }
+            raw = raw.slice(match[0].length);
+            sourcesParsed = true;
+            searching = false;
+            assistantMsg.content = raw;
+          } else if (raw.length >= 11 && !raw.startsWith('__SOURCES__')) {
+            sourcesParsed = true;
+            searching = false;
+            assistantMsg.content = raw;
+          }
+        } else {
+          assistantMsg.content = raw;
+        }
+
+        loading = false;
+        render();
+      }
+
+      if (!assistantMsg.content) {
+        assistantMsg.content = 'No pude generar una respuesta.';
+        render();
+      }
+      searching = false;
+      saveConversations();
+    } catch (e) {
+      assistantMsg.content = 'Error de conexión. Intenta de nuevo.';
+      loading = false;
+      searching = false;
+      render();
+      saveConversations();
+    }
+  }
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if ((!text && !pendingImage) || loading) return;
+
+    const convo = getActiveConvo();
+    if (!convo) return;
+
+    const userMsg = { role: 'user', content: text };
+    if (pendingImage) {
+      userMsg.image = { mimeType: pendingImage.mimeType, data: pendingImage.data };
+    }
+    convo.messages.push(userMsg);
+
+    if (convo.title === 'Nuevo chat' && text) {
+      convo.title = text.length > 40 ? text.slice(0, 40) + '…' : text;
+    }
+
+    input.value = '';
+    pendingImage = null;
+    renderPreview();
+    loading = true;
+    searching = webSearchEnabled;
+    render();
+    renderChatList();
+    saveConversations();
+
+    const assistantMsg = { role: 'assistant', content: '' };
+    convo.messages.push(assistantMsg);
+    render();
+
+    await streamAssistantReply(convo, assistantMsg);
+  }
+
+  async function saveEdit(i, newText) {
+    const convo = getActiveConvo();
+    if (!convo) return;
+    const trimmed = newText.trim();
+    if (!trimmed || loading) { editingIndex = null; render(); return; }
+
+    const original = convo.messages[i];
+    const updatedMsg = { role: 'user', content: trimmed };
+    if (original.image) updatedMsg.image = original.image;
+
+    convo.messages = convo.messages.slice(0, i);
+    convo.messages.push(updatedMsg);
+
+    editingIndex = null;
+    loading = true;
+    searching = webSearchEnabled;
+    render();
+    saveConversations();
+
+    const assistantMsg = { role: 'assistant', content: '' };
+    convo.messages.push(assistantMsg);
+    render();
+
+    await streamAssistantReply(convo, assistantMsg);
+  }
+
+  clearBtn.addEventListener('click', () => {
+    const convo = getActiveConvo();
+    if (!convo) return;
+    convo.messages = [];
+    convo.title = 'Nuevo chat';
+    editingIndex = null;
+    saveConversations();
+    renderChatList();
+    render();
+  });
+
+  menuBtn.addEventListener('click', () => {
+    renderChatList();
+    overlay.classList.add('open');
+  });
+  closePanelBtn.addEventListener('click', () => overlay.classList.remove('open'));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('open'); });
+
+  newChatBtn.addEventListener('click', () => {
+    createConversation();
+    editingIndex = null;
+    renderChatList();
+    render();
+    overlay.classList.remove('open');
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  loadConversations();
+  loadWebSearchSetting();
+  render();
+
+  // ================= MINIJUEGOS =================
+  const gamesBtn = document.getElementById('gamesBtn');
+  const gamesOverlay = document.getElementById('gamesOverlay');
+  const closeGamesBtn = document.getElementById('closeGamesBtn');
+  const gamesList = document.getElementById('gamesList');
+  const geoDashCard = document.getElementById('geoDashCard');
+  const geoDashGame = document.getElementById('geoDashGame');
+  const backToGamesBtn = document.getElementById('backToGamesBtn');
+  const gameCanvas = document.getElementById('gameCanvas');
+  const scoreLabel = document.getElementById('scoreLabel');
+  const bestLabel = document.getElementById('bestLabel');
+  const gameOverBox = document.getElementById('gameOverBox');
+  const retryBtn = document.getElementById('retryBtn');
+  const geoDashBest = document.getElementById('geoDashBest');
+  const milestoneToast = document.getElementById('milestoneToast');
+
+  const MILESTONES = [50, 100, 200, 300, 500, 750, 1000];
+  let nextMilestoneIdx = 0;
+
+  function showMilestone(text) {
+    milestoneToast.textContent = text;
+    milestoneToast.style.display = 'block';
+    milestoneToast.style.animation = 'none';
+    void milestoneToast.offsetWidth;
+    milestoneToast.style.animation = 'toast-pop 1.1s ease-out forwards';
+  }
+
+  const BEST_KEY = 'zpit_geodash_best';
+  let bestScore = parseInt(localStorage.getItem(BEST_KEY) || '0', 10);
+  geoDashBest.textContent = 'Mejor puntaje: ' + bestScore;
+
+  gamesBtn.addEventListener('click', () => {
+    gamesList.style.display = 'block';
+    geoDashGame.style.display = 'none';
+    gamesOverlay.classList.add('open');
+  });
+  closeGamesBtn.addEventListener('click', () => {
+    gamesOverlay.classList.remove('open');
+    stopGame();
+  });
+  gamesOverlay.addEventListener('click', (e) => { if (e.target === gamesOverlay) { gamesOverlay.classList.remove('open'); stopGame(); } });
+
+  geoDashCard.addEventListener('click', () => {
+    gamesList.style.display = 'none';
+    geoDashGame.style.display = 'block';
+    startGame();
+  });
+  backToGamesBtn.addEventListener('click', () => {
+    stopGame();
+    gamesList.style.display = 'block';
+    geoDashGame.style.display = 'none';
+  });
+  retryBtn.addEventListener('click', () => startGame());
+
+  const ctx = gameCanvas.getContext('2d');
+  let animId = null;
+  let running = false;
+
+  let player, obstacles, speed, score, groundY, elapsed, obstacleTimer, nextGapFrames, particles;
+
+  function resizeCanvas() {
+    const rect = gameCanvas.getBoundingClientRect();
+    gameCanvas.width = rect.width * 2;
+    gameCanvas.height = rect.height * 2;
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
+  }
+
+  function startGame() {
+    resizeCanvas();
+    const w = gameCanvas.width / 2;
+    const h = gameCanvas.height / 2;
+    groundY = h - 30;
+    player = { x: w * 0.2, y: groundY - 24, size: 24, vy: 0, jumping: false, rotation: 0 };
+    obstacles = [];
+    particles = [];
+    speed = 4.2;
+    score = 0;
+    elapsed = 0;
+    obstacleTimer = 0;
+    nextGapFrames = 70;
+    nextMilestoneIdx = 0;
+    gameOverBox.style.display = 'none';
+    milestoneToast.style.display = 'none';
+    running = true;
+    spawnObstacle(w + 80);
+    if (animId) cancelAnimationFrame(animId);
+    animId = requestAnimationFrame(loop);
+  }
+
+  function stopGame() {
+    running = false;
+    if (animId) cancelAnimationFrame(animId);
+  }
+
+  function spawnObstacle(startX) {
+    const w = gameCanvas.width / 2;
+    const x = startX || w + 40;
+    const type = Math.random() < 0.3 ? 'block' : 'spike';
+
+    const canBeDouble = score > 40 && Math.random() < 0.22 && type === 'spike';
+    if (canBeDouble) {
+      obstacles.push({ x, size: 20, type: 'spike' });
+      obstacles.push({ x: x + 34, size: 20, type: 'spike' });
+    } else if (type === 'block') {
+      obstacles.push({ x, size: 22, type: 'block' });
+    } else {
+      obstacles.push({ x, size: 22, type: 'spike' });
+    }
+
+    const base = score > 500 ? 52 : 62;
+    const variance = Math.floor(Math.random() * 30);
+    nextGapFrames = base + variance;
+    obstacleTimer = 0;
+  }
+
+  function jump(e) {
+    if (e) e.preventDefault();
+    if (!running) return;
+    if (!player.jumping) {
+      player.vy = -8.6;
+      player.jumping = true;
+    }
+  }
+
+  gameCanvas.addEventListener('touchstart', jump, { passive: false });
+  gameCanvas.addEventListener('mousedown', jump);
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && geoDashGame.style.display !== 'none') {
+      e.preventDefault();
+      jump();
+    }
+  });
+
+  function loop() {
+    if (!running) return;
+    const w = gameCanvas.width / 2;
+    const h = gameCanvas.height / 2;
+
+    elapsed++;
+    score = Math.floor(elapsed / 6);
+    const etapa1 = Math.min(score, 260) * 0.012;
+    const etapa2 = Math.min(Math.max(0, score - 500), 400) * 0.006;
+    speed = 4.2 + etapa1 + etapa2;
+
+    player.vy += 0.55;
+    player.y += player.vy;
+    if (player.jumping) {
+      player.rotation += 7;
+      if (elapsed % 2 === 0) {
+        particles.push({ x: player.x + player.size / 2, y: player.y + player.size / 2, alpha: 0.8, size: player.size * 0.4 });
+      }
+    }
+    if (player.y >= groundY - player.size) {
+      player.y = groundY - player.size;
+      player.vy = 0;
+      player.jumping = false;
+      player.rotation = Math.round(player.rotation / 90) * 90;
+    }
+
+    for (const p of particles) { p.alpha -= 0.04; p.x -= speed * 0.5; }
+    particles = particles.filter((p) => p.alpha > 0);
+
+    for (const o of obstacles) o.x -= speed;
+    obstacleTimer++;
+    if (obstacleTimer >= nextGapFrames) {
+      spawnObstacle();
+    }
+    obstacles = obstacles.filter((o) => o.x > -40);
+
+    for (const o of obstacles) {
+      const px1 = player.x, px2 = player.x + player.size;
+      const py1 = player.y, py2 = player.y + player.size;
+      const ox1 = o.x, ox2 = o.x + o.size;
+      const oy1 = groundY - o.size, oy2 = groundY;
+      if (px2 > ox1 + 4 && px1 < ox2 - 4 && py2 > oy1 + 4) {
+        return gameOver();
+      }
+    }
+
+    if (nextMilestoneIdx < MILESTONES.length && score >= MILESTONES[nextMilestoneIdx]) {
+      showMilestone('¡' + MILESTONES[nextMilestoneIdx] + ' PUNTOS!');
+      nextMilestoneIdx++;
+    }
+
+    const hue = (elapsed * 0.35) % 360;
+    ctx.fillStyle = `hsl(${hue}, 45%, 11%)`;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = `hsla(${hue}, 55%, 55%, 0.10)`;
+    ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y < h; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+    ctx.fillStyle = `hsl(${hue}, 40%, 6%)`;
+    ctx.fillRect(0, groundY, w, h - groundY);
+    ctx.strokeStyle = `hsla(${hue}, 55%, 55%, 0.35)`;
+    for (let x = -(elapsed * speed % 24); x < w; x += 24) {
+      ctx.beginPath(); ctx.moveTo(x, groundY); ctx.lineTo(x, h); ctx.stroke();
+    }
+    ctx.strokeStyle = `hsl(${hue}, 60%, 55%)`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(w, groundY); ctx.stroke();
+    ctx.lineWidth = 1;
+
+    for (const p of particles) {
+      ctx.fillStyle = `rgba(217,125,37,${p.alpha})`;
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+
+    ctx.save();
+    ctx.translate(player.x + player.size / 2, player.y + player.size / 2);
+    ctx.rotate((player.rotation * Math.PI) / 180);
+    const grad = ctx.createLinearGradient(-player.size / 2, -player.size / 2, player.size / 2, player.size / 2);
+    grad.addColorStop(0, '#F2C879');
+    grad.addColorStop(1, '#D97D25');
+    ctx.fillStyle = grad;
+    ctx.shadowColor = 'rgba(217,125,37,0.7)';
+    ctx.shadowBlur = 12;
+    ctx.fillRect(-player.size / 2, -player.size / 2, player.size, player.size);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#2E2610';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-player.size / 2, -player.size / 2, player.size, player.size);
+    ctx.restore();
+
+    for (const o of obstacles) {
+      if (o.type === 'block') {
+        const blockGrad = ctx.createLinearGradient(o.x, groundY - o.size, o.x, groundY);
+        blockGrad.addColorStop(0, '#F2C879');
+        blockGrad.addColorStop(1, '#B5651D');
+        ctx.fillStyle = blockGrad;
+        ctx.fillRect(o.x, groundY - o.size, o.size, o.size);
+        ctx.strokeStyle = '#2E2610';
+        ctx.strokeRect(o.x, groundY - o.size, o.size, o.size);
+      } else {
+        const spikeGrad = ctx.createLinearGradient(o.x, groundY - o.size, o.x, groundY);
+        spikeGrad.addColorStop(0, '#F2C879');
+        spikeGrad.addColorStop(1, '#B5651D');
+        ctx.fillStyle = spikeGrad;
+        ctx.beginPath();
+        ctx.moveTo(o.x, groundY);
+        ctx.lineTo(o.x + o.size / 2, groundY - o.size);
+        ctx.lineTo(o.x + o.size, groundY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#2E2610';
+        ctx.stroke();
+      }
+    }
+
+    scoreLabel.textContent = 'PUNTAJE: ' + score;
+    bestLabel.textContent = 'MEJOR: ' + Math.max(bestScore, score);
+
+    animId = requestAnimationFrame(loop);
+  }
+
+  function gameOver() {
+    running = false;
+    if (score > bestScore) {
+      bestScore = score;
+      localStorage.setItem(BEST_KEY, String(bestScore));
+      geoDashBest.textContent = 'Mejor puntaje: ' + bestScore;
+    }
+    gameOverBox.style.display = 'block';
+  }
+
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsOverlay = document.getElementById('settingsOverlay');
+  const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+  const lightModeBtn = document.getElementById('lightModeBtn');
+  const darkModeBtn = document.getElementById('darkModeBtn');
+  const swatchRow = document.getElementById('swatchRow');
+
+  const THEME_KEY = 'zpit_theme_mode';
+  const ACCENT_KEY = 'zpit_accent_color';
+
+  const ACCENTS = [
+    { name: 'Terracota', value: '#C96442' },
+    { name: 'Verde', value: '#4F8A5B' },
+    { name: 'Azul', value: '#3D6FB4' },
+    { name: 'Rojo', value: '#C1443C' },
+    { name: 'Amarillo', value: '#C08A1E' },
+    { name: 'Celeste', value: '#2E9BC4' },
+  ];
+
+  const THEME_BASES = {
+    light: { bg: '#F5F1EA', surface: '#FFFFFF', surfaceAlt: '#FBF8F2', chip: '#F0EBE0', border: '#E3DDCC' },
+    dark: { bg: '#1E1C18', surface: '#29261F', surfaceAlt: '#252219', chip: '#333025', border: '#3B372E' },
+  };
+  const TINT_RATIOS = {
+    light: { bg: 0.16, surface: 0.05, surfaceAlt: 0.09, chip: 0.13, border: 0.22 },
+    dark: { bg: 0.34, surface: 0.15, surfaceAlt: 0.20, chip: 0.27, border: 0.30 },
+  };
+
+  function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '');
+    const bigint = parseInt(h, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  function hexToRgbArr(hex) {
+    const h = hex.replace('#', '');
+    return [parseInt(h.substring(0, 2), 16), parseInt(h.substring(2, 4), 16), parseInt(h.substring(4, 6), 16)];
+  }
+
+  function mixHex(baseHex, accentHex, ratio) {
+    const [br, bg, bb] = hexToRgbArr(baseHex);
+    const [ar, ag, ab] = hexToRgbArr(accentHex);
+    const r = Math.round(br + (ar - br) * ratio);
+    const g = Math.round(bg + (ag - bg) * ratio);
+    const b = Math.round(bb + (ab - bb) * ratio);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function applyMode(mode) {
+    document.documentElement.setAttribute('data-theme', mode);
+    localStorage.setItem(THEME_KEY, mode);
+    lightModeBtn.classList.toggle('active', mode === 'light');
+    darkModeBtn.classList.toggle('active', mode === 'dark');
+    const currentAccent = localStorage.getItem(ACCENT_KEY) || ACCENTS[0].value;
+    applyAccent(currentAccent);
+  }
+
+  function applyAccent(color) {
+    document.documentElement.style.setProperty('--accent', color);
+    document.documentElement.style.setProperty('--accent-soft', hexToRgba(color, 0.14));
+    localStorage.setItem(ACCENT_KEY, color);
+
+    const mode = document.documentElement.getAttribute('data-theme') || 'light';
+    const base = THEME_BASES[mode];
+    const ratio = TINT_RATIOS[mode];
+
+    document.documentElement.style.setProperty('--bg', mixHex(base.bg, color, ratio.bg));
+    document.documentElement.style.setProperty('--surface', mixHex(base.surface, color, ratio.surface));
+    document.documentElement.style.setProperty('--surface-alt', mixHex(base.surfaceAlt, color, ratio.surfaceAlt));
+    document.documentElement.style.setProperty('--chip', mixHex(base.chip, color, ratio.chip));
+    document.documentElement.style.setProperty('--border', mixHex(base.border, color, ratio.border));
+
+    document.querySelectorAll('.swatch').forEach((el) => {
+      el.classList.toggle('active', el.dataset.color === color);
+    });
+  }
+
+  function renderSwatches() {
+    swatchRow.innerHTML = '';
+    const currentAccent = localStorage.getItem(ACCENT_KEY) || ACCENTS[0].value;
+    for (const a of ACCENTS) {
+      const sw = document.createElement('div');
+      sw.className = 'swatch' + (a.value === currentAccent ? ' active' : '');
+      sw.style.background = a.value;
+      sw.dataset.color = a.value;
+      sw.title = a.name;
+      sw.onclick = () => applyAccent(a.value);
+      swatchRow.appendChild(sw);
+    }
+  }
+
+  settingsBtn.addEventListener('click', () => {
+    renderSwatches();
+    settingsOverlay.classList.add('open');
+  });
+  closeSettingsBtn.addEventListener('click', () => settingsOverlay.classList.remove('open'));
+  settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) settingsOverlay.classList.remove('open'); });
+
+  lightModeBtn.addEventListener('click', () => applyMode('light'));
+  darkModeBtn.addEventListener('click', () => applyMode('dark'));
+
+  const savedMode = localStorage.getItem(THEME_KEY) || 'light';
+  const savedAccent = localStorage.getItem(ACCENT_KEY) || ACCENTS[0].value;
+  applyMode(savedMode);
+  applyAccent(savedAccent);
+
+  // ================= ZPIT LABERINTO (Pac-Man) =================
+  (function () {
+    const CELL = 20, COLS = 21, ROWS = 21;
+    const LEFT = [
+      "###########",
+      "#o.........",
+      "#.###.###..",
+      "#.###.###..",
+      "#.###.###..",
+      "#..........",
+      "#.###.###..",
+      "#.###.###..",
+      "#.###.###..",
+      "#.##....  .",
+      "#.##....  .",
+      "#..........",
+      "#..........",
+      "#.###.###..",
+      "#.###.###..",
+      "#.###.###..",
+      "#..........",
+      "#.#######..",
+      "#.#######..",
+      "#o.........",
+      "###########"
+    ];
+    function mirrorRow(l) { return l + l.slice(0, 10).split('').reverse().join(''); }
+    const MAZE_TEMPLATE = LEFT.map(mirrorRow);
+
+    const pacCard = document.getElementById('pacmanCard');
+    const pacFull = document.getElementById('pacmanFullscreen');
+    const pacCanvas = document.getElementById('pacmanCanvas');
+    const pctx = pacCanvas.getContext('2d');
+    const pacBackBtn = document.getElementById('pacmanBackBtn');
+    const pacScoreLabel = document.getElementById('pacmanScoreLabel');
+    const pacLivesLabel = document.getElementById('pacmanLivesLabel');
+    const pacOverBox = document.getElementById('pacmanOverBox');
+    const pacOverText = document.getElementById('pacmanOverText');
+    const pacRetryBtn = document.getElementById('pacmanRetryBtn');
+    const pacBestLabel = document.getElementById('pacmanBest');
+
+    const PAC_BEST_KEY = 'zpit_pacman_best';
+    let pacBest = parseInt(localStorage.getItem(PAC_BEST_KEY) || '0', 10);
+    pacBestLabel.textContent = 'Mejor puntaje: ' + pacBest;
+
+    let maze, pac, ghosts, pacRunning = false, pacAnim = null, pacScore = 0, pacLives = 3;
+    let frightTimer = 0, pelletsLeft = 0, lastTs = 0, pacTimer = 0, ghostTimer = 0;
+
+    const PAC_INTERVAL = 0.16;
+    const GHOST_INTERVAL_NORMAL = 0.20;
+    const GHOST_INTERVAL_SCARED = 0.30;
+
+    const GHOST_COLORS = ['#F6A6C1', '#4DE0E0', '#F6A83C', '#E84545'];
+    const GHOST_START = [
+      { col: 9, row: 9 }, { col: 11, row: 9 }, { col: 9, row: 10 }, { col: 11, row: 10 }
+    ];
+
+    function cellAt(c, r) {
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return '#';
+      return maze[r][c];
+    }
+    function isWall(c, r) { return cellAt(c, r) === '#'; }
+
+    function eatPelletAt(col, row) {
+      const cell = cellAt(col, row);
+      if (cell === '.' || cell === 'o') {
+        maze[row][col] = ' ';
+        pelletsLeft--;
+        pacScore += cell === 'o' ? 50 : 10;
+        if (cell === 'o') {
+          frightTimer = 6;
+          ghosts.forEach((g) => { if (!g.eaten) g.scared = true; });
+        }
+        updateHud();
+      }
+    }
+
+    function resetGame() {
+      maze = MAZE_TEMPLATE.map((row) => row.split(''));
+      pelletsLeft = 0;
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        if (maze[r][c] === '.' || maze[r][c] === 'o') pelletsLeft++;
+      }
+      pac = { col: 10, row: 16, dir: { x: 0, y: 0 }, next: { x: 0, y: 0 }, mouth: 0 };
+      ghosts = GHOST_START.map((g, i) => ({
+        col: g.col, row: g.row, dir: { x: 0, y: -1 }, color: GHOST_COLORS[i],
+        scared: false, eaten: false, respawnT: 0
+      }));
+      pacScore = 0;
+      pacLives = 3;
+      frightTimer = 0;
+      pacTimer = 0;
+      ghostTimer = 0;
+      updateHud();
+      pacOverBox.style.display = 'none';
+      eatPelletAt(pac.col, pac.row);
+    }
+
+    function updateHud() {
+      pacScoreLabel.textContent = 'PUNTAJE: ' + pacScore;
+      pacLivesLabel.textContent = 'VIDAS: ' + '●'.repeat(Math.max(pacLives, 0)) + '○'.repeat(Math.max(3 - pacLives, 0));
+    }
+
+    function launchLoop() {
+      pacRunning = true;
+      lastTs = performance.now();
+      if (pacAnim) cancelAnimationFrame(pacAnim);
+      pacAnim = requestAnimationFrame(pacLoop);
+    }
+
+    function openPacman() {
+      resetGame();
+      pacFull.style.display = 'flex';
+      drawPacman();
+      launchLoop();
+    }
+    function closePacman() {
+      pacRunning = false;
+      if (pacAnim) cancelAnimationFrame(pacAnim);
+      pacFull.style.display = 'none';
+      gamesOverlay.classList.add('open');
+    }
+
+    pacCard.addEventListener('click', () => {
+      gamesOverlay.classList.remove('open');
+      openPacman();
+    });
+    pacBackBtn.addEventListener('click', closePacman);
+    pacRetryBtn.addEventListener('click', () => {
+      resetGame();
+      drawPacman();
+      launchLoop();
+    });
+
+    function setDir(x, y) { if (pac) pac.next = { x, y }; }
+    window.addEventListener('keydown', (e) => {
+      if (pacFull.style.display !== 'flex') return;
+      if (e.key === 'ArrowUp' || e.key === 'w') { setDir(0, -1); e.preventDefault(); }
+      else if (e.key === 'ArrowDown' || e.key === 's') { setDir(0, 1); e.preventDefault(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'a') { setDir(-1, 0); e.preventDefault(); }
+      else if (e.key === 'ArrowRight' || e.key === 'd') { setDir(1, 0); e.preventDefault(); }
+    });
+    ['pacUp', 'pacDown', 'pacLeft', 'pacRight'].forEach((id) => {
+      const el = document.getElementById(id);
+      const map = { pacUp: [0, -1], pacDown: [0, 1], pacLeft: [-1, 0], pacRight: [1, 0] };
+      el.addEventListener('click', () => setDir(map[id][0], map[id][1]));
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); setDir(map[id][0], map[id][1]); }, { passive: false });
+    });
+
+    function stepPac() {
+      if ((pac.next.x || pac.next.y) && !isWall(pac.col + pac.next.x, pac.row + pac.next.y)) {
+        pac.dir = pac.next;
+      }
+      if (!isWall(pac.col + pac.dir.x, pac.row + pac.dir.y)) {
+        pac.col += pac.dir.x;
+        pac.row += pac.dir.y;
+      }
+      eatPelletAt(pac.col, pac.row);
+    }
+
+    function ghostChooseDir(g) {
+      const opts = [{ x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
+      let valid = opts.filter((d) => !isWall(g.col + d.x, g.row + d.y));
+      if (valid.length > 1) {
+        valid = valid.filter((d) => !(d.x === -g.dir.x && d.y === -g.dir.y));
+      }
+      if (valid.length === 0) return { x: -g.dir.x, y: -g.dir.y };
+      if (Math.random() < 0.30) return valid[Math.floor(Math.random() * valid.length)];
+      let best = valid[0], bestDist = g.scared ? -Infinity : Infinity;
+      for (const d of valid) {
+        const nc = g.col + d.x, nr = g.row + d.y;
+        const dist = Math.hypot(nc - pac.col, nr - pac.row);
+        if (g.scared ? dist > bestDist : dist < bestDist) { bestDist = dist; best = d; }
+      }
+      return best;
+    }
+
+    function loseLife() {
+      pacLives--;
+      updateHud();
+      if (pacLives <= 0) {
+        pacRunning = false;
+        if (pacScore > pacBest) {
+          pacBest = pacScore;
+          localStorage.setItem(PAC_BEST_KEY, String(pacBest));
+          pacBestLabel.textContent = 'Mejor puntaje: ' + pacBest;
+        }
+        pacOverText.textContent = 'GAME OVER · ' + pacScore + ' PTS';
+        pacOverBox.style.display = 'block';
+      } else {
+        pac.col = 10; pac.row = 16; pac.dir = { x: 0, y: 0 }; pac.next = { x: 0, y: 0 };
+        ghosts.forEach((gg, i) => {
+          gg.col = GHOST_START[i].col; gg.row = GHOST_START[i].row;
+          gg.dir = { x: 0, y: -1 }; gg.scared = false; gg.eaten = false;
+        });
+        frightTimer = 0;
+        ghostTimer = 0;
+        pacTimer = 0;
+      }
+    }
+
+    function checkCollisions() {
+      for (const g of ghosts) {
+        if (g.eaten) continue;
+        if (g.col === pac.col && g.row === pac.row) {
+          if (g.scared) {
+            g.eaten = true; g.scared = false; g.respawnT = 3;
+            pacScore += 200;
+            updateHud();
+          } else {
+            loseLife();
+            return;
+          }
+        }
+      }
+    }
+
+    function stepGhosts() {
+      ghosts.forEach((g) => {
+        if (g.eaten) return;
+        g.dir = ghostChooseDir(g);
+        g.col += g.dir.x;
+        g.row += g.dir.y;
+      });
+      checkCollisions();
+    }
+
+    function pacLoop(ts) {
+      if (!pacRunning) return;
+      try {
+        pacLoopBody(ts);
+      } catch (err) {
+        pacRunning = false;
+        pacOverText.textContent = 'ERROR: ' + err.message;
+        pacOverBox.style.display = 'block';
+        console.error('Zpit Laberinto error:', err);
+        return;
+      }
+      if (pacRunning) pacAnim = requestAnimationFrame(pacLoop);
+    }
+
+    function pacLoopBody(ts) {
+      const dt = Math.max(0, Math.min((ts - lastTs) / 1000, 0.05));
+      lastTs = ts;
+      pac.mouth += dt * 10;
+
+      if (frightTimer > 0) {
+        frightTimer -= dt;
+        if (frightTimer <= 0) { frightTimer = 0; ghosts.forEach((g) => g.scared = false); }
+      }
+
+      ghosts.forEach((g) => {
+        if (g.eaten) {
+          g.respawnT -= dt;
+          if (g.respawnT <= 0) {
+            g.eaten = false; g.scared = false;
+            g.col = 10; g.row = 9; g.dir = { x: 0, y: -1 };
+          }
+        }
+      });
+
+      pacTimer += dt;
+      while (pacRunning && pacTimer >= PAC_INTERVAL) {
+        pacTimer -= PAC_INTERVAL;
+        stepPac();
+        checkCollisions();
+      }
+
+      const ghostInterval = frightTimer > 0 ? GHOST_INTERVAL_SCARED : GHOST_INTERVAL_NORMAL;
+      ghostTimer += dt;
+      while (pacRunning && ghostTimer >= ghostInterval) {
+        ghostTimer -= ghostInterval;
+        stepGhosts();
+      }
+
+      if (pelletsLeft <= 0 && pacRunning) {
+        pacRunning = false;
+        if (pacScore > pacBest) {
+          pacBest = pacScore;
+          localStorage.setItem(PAC_BEST_KEY, String(pacBest));
+          pacBestLabel.textContent = 'Mejor puntaje: ' + pacBest;
+        }
+        pacOverText.textContent = '¡LABERINTO LIMPIO! · ' + pacScore + ' PTS';
+        pacOverBox.style.display = 'block';
+      }
+
+      drawPacman();
+    }
+
+    function drawPacman() {
+      pctx.fillStyle = '#05050a';
+      pctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const cell = maze[r][c];
+          const x = c * CELL, y = r * CELL;
+          if (cell === '#') {
+            pctx.fillStyle = '#1b2a8f';
+            pctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+          } else if (cell === '.') {
+            pctx.fillStyle = '#f6c453';
+            pctx.beginPath();
+            pctx.arc(x + CELL / 2, y + CELL / 2, 2, 0, Math.PI * 2);
+            pctx.fill();
+          } else if (cell === 'o') {
+            const pulse = 3 + Math.sin(performance.now() / 150) * 1.2;
+            pctx.fillStyle = '#f6c453';
+            pctx.beginPath();
+            pctx.arc(x + CELL / 2, y + CELL / 2, pulse, 0, Math.PI * 2);
+            pctx.fill();
+          }
+        }
+      }
+
+      const px = pac.col * CELL + CELL / 2, py = pac.row * CELL + CELL / 2;
+      const mouthAngle = Math.abs(Math.sin(pac.mouth)) * 0.28 + 0.03;
+      let angleOffset = 0;
+      if (pac.dir.x === -1) angleOffset = Math.PI;
+      else if (pac.dir.y === -1) angleOffset = -Math.PI / 2;
+      else if (pac.dir.y === 1) angleOffset = Math.PI / 2;
+      pctx.fillStyle = '#ffd23f';
+      pctx.beginPath();
+      pctx.moveTo(px, py);
+      pctx.arc(px, py, CELL / 2 - 1, angleOffset + mouthAngle * Math.PI, angleOffset + (2 - mouthAngle) * Math.PI);
+      pctx.closePath();
+      pctx.fill();
+
+      ghosts.forEach((g) => {
+        if (g.eaten) return;
+        const gx = g.col * CELL + CELL / 2, gy = g.row * CELL + CELL / 2;
+        pctx.fillStyle = g.scared ? (frightTimer < 1.5 && Math.floor(performance.now() / 150) % 2 === 0 ? '#fff' : '#3a4de0') : g.color;
+        pctx.beginPath();
+        pctx.arc(gx, gy, CELL / 2 - 2, Math.PI, 0);
+        pctx.lineTo(gx + CELL / 2 - 2, gy + CELL / 2 - 2);
+        for (let i = 0; i < 3; i++) {
+          pctx.lineTo(gx + CELL / 2 - 2 - (i + 0.5) * (CELL - 4) / 3, gy + CELL / 2 - 2 - (i % 2 === 0 ? 4 : 0));
+        }
+        pctx.lineTo(gx - CELL / 2 + 2, gy + CELL / 2 - 2);
+        pctx.closePath();
+        pctx.fill();
+        pctx.fillStyle = '#fff';
+        pctx.beginPath(); pctx.arc(gx - 3, gy - 2, 2.2, 0, Math.PI * 2); pctx.fill();
+        pctx.beginPath(); pctx.arc(gx + 3, gy - 2, 2.2, 0, Math.PI * 2); pctx.fill();
+      });
+    }
+  })();
+
+  // ================= ESTADO EMOCIONAL, MEMORIA, ESTADÍSTICAS Y LOGROS =================
+  (function () {
+    const MEM_KEY = 'zpit_memories';
+    const STATS_KEY = 'zpit_stats';
+    const ACHV_KEY = 'zpit_achievements';
+    const EMO_KEY = 'zpit_emotion';
+
+    function loadJSON(key, fallback) {
+      try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+      catch (e) { return fallback; }
+    }
+    function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+
+    // ---------- Estado emocional ----------
+    let emotion = loadJSON(EMO_KEY, { relaxed: 82, curious: 40, stress: 10, frustration: 5 });
+
+    const EMOTION_META = [
+      { key: 'relaxed', label: 'Relajado', emoji: '😊', color: '#7EA87A' },
+      { key: 'curious', label: 'Curioso', emoji: '🤔', color: '#3D6FB4' },
+      { key: 'stress', label: 'Estrés', emoji: '😟', color: '#C08A1E' },
+      { key: 'frustration', label: 'Frustración', emoji: '😠', color: '#C1443C' },
+    ];
+
+    const FRUSTRATION_WORDS = ['no funciona', 'no sirve', 'error', 'maldit', 'harto', 'harta', 'odio', 'cansad', 'molest', 'pésimo', 'terrible', 'fallo', 'falla', 'rompiste', 'rompió', 'ugh', 'otra vez no'];
+    const STRESS_WORDS = ['urgente', 'no puedo', 'ayuda', 'apurad', 'rápido', 'prisa', 'ya mismo', 'se me acaba', 'deadline', 'entrega'];
+    const CURIOUS_WORDS = ['cómo', 'como funciona', 'por qué', 'porque', 'qué es', 'que es', 'cuéntame', 'explica', 'curioso', 'interesante', 'qué pasa'];
+    const RELAXED_WORDS = ['gracias', 'genial', 'perfecto', 'excelente', 'buena idea', 'me gusta', 'tranquilo', 'quedó bien', 'quedo bien'];
+
+    function countMatches(text, words) {
+      const t = text.toLowerCase();
+      let n = 0;
+      words.forEach((w) => { if (t.includes(w)) n++; });
+      return n;
+    }
+
+    function analyzeEmotion(text) {
+      if (!text) return;
+      const frus = countMatches(text, FRUSTRATION_WORDS);
+      const stress = countMatches(text, STRESS_WORDS);
+      const curious = countMatches(text, CURIOUS_WORDS);
+      const relaxed = countMatches(text, RELAXED_WORDS);
+
+      const target = {
+        frustration: emotion.frustration + frus * 22 - 4,
+        stress: emotion.stress + stress * 18 - 4,
+        curious: emotion.curious + curious * 16 - 3,
+        relaxed: emotion.relaxed + relaxed * 14 - (frus + stress) * 10 - 2,
+      };
+      emotion.frustration = Math.round(emotion.frustration * 0.55 + target.frustration * 0.45);
+      emotion.stress = Math.round(emotion.stress * 0.55 + target.stress * 0.45);
+      emotion.curious = Math.round(emotion.curious * 0.6 + target.curious * 0.4);
+      emotion.relaxed = Math.round(emotion.relaxed * 0.6 + target.relaxed * 0.4);
+
+      Object.keys(emotion).forEach((k) => { emotion[k] = Math.max(2, Math.min(100, emotion[k])); });
+      saveJSON(EMO_KEY, emotion);
+      renderEmotion();
+    }
+
+    function renderEmotion() {
+      const wrap = document.getElementById('emotionRows');
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      EMOTION_META.forEach((m) => {
+        const val = emotion[m.key] || 0;
+        const row = document.createElement('div');
+        row.className = 'emotion-row';
+        row.innerHTML = '<span class="emotion-label">' + m.emoji + ' ' + m.label + '</span>' +
+          '<span class="emotion-track"><span class="emotion-fill" style="width:' + val + '%;background:' + m.color + '"></span></span>' +
+          '<span class="emotion-pct">' + val + '%</span>';
+        wrap.appendChild(row);
+      });
+    }
+
+    const emotionToggle = document.getElementById('emotionToggle');
+    const emotionRows = document.getElementById('emotionRows');
+    const emotionCollapseIcon = document.getElementById('emotionCollapseIcon');
+    let emotionCollapsed = localStorage.getItem('zpit_emotion_collapsed') === 'true';
+    function applyEmotionCollapse() {
+      emotionRows.style.display = emotionCollapsed ? 'none' : 'block';
+      emotionCollapseIcon.textContent = emotionCollapsed ? '▸' : '▾';
+    }
+    emotionToggle.addEventListener('click', () => {
+      emotionCollapsed = !emotionCollapsed;
+      localStorage.setItem('zpit_emotion_collapsed', String(emotionCollapsed));
+      applyEmotionCollapse();
+    });
+    renderEmotion();
+    applyEmotionCollapse();
+
+    // ---------- Memoria ----------
+    let memories = loadJSON(MEM_KEY, []);
+    const memoryBtn = document.getElementById('memoryBtn');
+    const memoryOverlay = document.getElementById('memoryOverlay');
+    const closeMemoryBtn = document.getElementById('closeMemoryBtn');
+    const memoryList = document.getElementById('memoryList');
+    const memoryInput = document.getElementById('memoryInput');
+    const memoryAddBtn = document.getElementById('memoryAddBtn');
+
+    function saveMemories() { saveJSON(MEM_KEY, memories); }
+
+    function renderMemories() {
+      memoryList.innerHTML = '';
+      if (memories.length === 0) {
+        memoryList.innerHTML = '<div class="empty mono" style="margin-top:20px;">[ SIN RECUERDOS TODAVÍA ]</div>';
+        return;
+      }
+      memories.slice().reverse().forEach((mem) => {
+        const item = document.createElement('div');
+        item.className = 'memory-item';
+        const textWrap = document.createElement('div');
+        textWrap.style.flex = '1';
+        const text = document.createElement('div');
+        text.className = 'memory-text';
+        text.textContent = mem.text;
+        textWrap.appendChild(text);
+        if (mem.auto) {
+          const badge = document.createElement('div');
+          badge.className = 'memory-auto-badge mono';
+          badge.textContent = 'DETECTADO AUTOMÁTICAMENTE';
+          textWrap.appendChild(badge);
+        }
+        const actions = document.createElement('div');
+        actions.className = 'memory-actions';
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '✎';
+        editBtn.onclick = () => {
+          const nv = prompt('Editar recuerdo:', mem.text);
+          if (nv !== null && nv.trim()) { mem.text = nv.trim(); saveMemories(); renderMemories(); }
+        };
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '✕';
+        delBtn.onclick = () => {
+          memories = memories.filter((m) => m.id !== mem.id);
+          saveMemories();
+          renderMemories();
+        };
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        item.appendChild(textWrap);
+        item.appendChild(actions);
+        memoryList.appendChild(item);
+      });
+    }
+
+    function addMemory(text, auto) {
+      const trimmed = (text || '').trim();
+      if (!trimmed) return;
+      if (auto && memories.some((m) => m.text.toLowerCase() === trimmed.toLowerCase())) return;
+      memories.push({ id: 'm_' + Date.now() + Math.random().toString(36).slice(2, 6), text: trimmed, auto: !!auto, createdAt: Date.now() });
+      saveMemories();
+      renderMemories();
+      checkAchievements();
+      if (auto) showAchvToast('🧠', 'Nuevo recuerdo guardado', trimmed.length > 44 ? trimmed.slice(0, 44) + '…' : trimmed);
+    }
+
+    memoryBtn.addEventListener('click', () => { renderMemories(); memoryOverlay.classList.add('open'); });
+    closeMemoryBtn.addEventListener('click', () => memoryOverlay.classList.remove('open'));
+    memoryOverlay.addEventListener('click', (e) => { if (e.target === memoryOverlay) memoryOverlay.classList.remove('open'); });
+    memoryAddBtn.addEventListener('click', () => { addMemory(memoryInput.value, false); memoryInput.value = ''; });
+    memoryInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { addMemory(memoryInput.value, false); memoryInput.value = ''; } });
+
+    const AUTO_MEMORY_PATTERNS = [
+      /mi proyecto se llama[^.!?\n]*/i,
+      /recuerda que[^.!?\n]*/i,
+      /mi objetivo es[^.!?\n]*/i,
+      /me llamo [^.!?\n]*/i,
+      /estoy creando[^.!?\n]*/i,
+      /trabajo en[^.!?\n]*/i,
+    ];
+    function detectAutoMemory(text) {
+      if (!text) return;
+      for (const rx of AUTO_MEMORY_PATTERNS) {
+        const match = text.match(rx);
+        if (match) { addMemory(match[0], true); break; }
+      }
+    }
+
+    // ---------- Estadísticas ----------
+    let stats = loadJSON(STATS_KEY, { messages: 0, responses: 0, timeMs: 0, days: [], lastActive: 0, streak: 0 });
+    const statsBtn = document.getElementById('statsBtn');
+    const statsOverlay = document.getElementById('statsOverlay');
+    const closeStatsBtn = document.getElementById('closeStatsBtn');
+    const statsGrid = document.getElementById('statsGrid');
+    const achvGrid = document.getElementById('achvGrid');
+
+    function saveStats() { saveJSON(STATS_KEY, stats); }
+    function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+    function registerDayVisit() {
+      const today = todayStr();
+      if (!stats.days.includes(today)) {
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        stats.streak = stats.days.includes(yesterday) ? stats.streak + 1 : 1;
+        stats.days.push(today);
+        saveStats();
+      }
+    }
+
+    function registerActivity() {
+      const now = Date.now();
+      if (stats.lastActive) {
+        const delta = now - stats.lastActive;
+        if (delta > 0 && delta < 5 * 60 * 1000) stats.timeMs += delta;
+      }
+      stats.lastActive = now;
+      saveStats();
+    }
+
+    function formatHours(ms) {
+      const h = ms / 3600000;
+      if (h < 1) return Math.round(ms / 60000) + ' min';
+      return h.toFixed(1) + ' h';
+    }
+
+    function renderStats() {
+      statsGrid.innerHTML = '';
+      const rows = [
+        ['💬 Mensajes enviados', stats.messages],
+        ['🤖 Respuestas generadas', stats.responses],
+        ['⏱ Tiempo conversando', formatHours(stats.timeMs)],
+        ['📅 Días usando Zpit', stats.days.length],
+        ['🔥 Racha actual', stats.streak + (stats.streak === 1 ? ' día' : ' días')],
+        ['🧠 Recuerdos guardados', memories.length],
+      ];
+      rows.forEach(([label, val]) => {
+        const row = document.createElement('div');
+        row.className = 'stat-row';
+        row.innerHTML = '<span>' + label + '</span><span class="stat-value">' + val + '</span>';
+        statsGrid.appendChild(row);
+      });
+    }
+
+    statsBtn.addEventListener('click', () => { renderStats(); renderAchievements(); statsOverlay.classList.add('open'); });
+    closeStatsBtn.addEventListener('click', () => statsOverlay.classList.remove('open'));
+    statsOverlay.addEventListener('click', (e) => { if (e.target === statsOverlay) statsOverlay.classList.remove('open'); });
+
+    // ---------- Logros ----------
+    const ACHIEVEMENTS = [
+      { id: 'first_message', icon: '🥉', name: 'Primer mensaje', desc: 'Enviaste tu primer mensaje a Zpit', check: () => stats.messages >= 1 },
+      { id: 'msgs_100', icon: '🥈', name: '100 mensajes enviados', desc: 'Ya llevas 100 mensajes', check: () => stats.messages >= 100 },
+      { id: 'msgs_1000', icon: '🥇', name: '1000 mensajes enviados', desc: '¡Mil mensajes con Zpit!', check: () => stats.messages >= 1000 },
+      { id: 'first_file', icon: '📚', name: 'Primer archivo analizado', desc: 'Adjuntaste tu primer archivo o imagen', check: () => localStorage.getItem('zpit_had_file') === 'true' },
+      { id: 'first_game', icon: '🎮', name: 'Primera partida', desc: 'Jugaste un minijuego de Zpit', check: () => localStorage.getItem('zpit_had_game') === 'true' },
+      { id: 'streak_7', icon: '🔥', name: 'Racha de 7 días', desc: '7 días seguidos usando Zpit', check: () => stats.streak >= 7 },
+      { id: 'memories_50', icon: '🧠', name: '50 recuerdos guardados', desc: 'Tu memoria con Zpit está creciendo', check: () => memories.length >= 50 },
+    ];
+    let unlockedAchv = loadJSON(ACHV_KEY, []);
+    function saveAchv() { saveJSON(ACHV_KEY, unlockedAchv); }
+
+    function checkAchievements() {
+      ACHIEVEMENTS.forEach((a) => {
+        if (!unlockedAchv.includes(a.id) && a.check()) {
+          unlockedAchv.push(a.id);
+          saveAchv();
+          showAchvToast(a.icon, '¡Logro desbloqueado!', a.name);
+        }
+      });
+    }
+
+    function renderAchievements() {
+      achvGrid.innerHTML = '';
+      ACHIEVEMENTS.forEach((a) => {
+        const isUnlocked = unlockedAchv.includes(a.id);
+        const item = document.createElement('div');
+        item.className = 'achv-item' + (isUnlocked ? ' unlocked' : '');
+        item.innerHTML = '<span class="achv-icon">' + a.icon + '</span><span class="achv-text"><span class="achv-name">' + a.name + '</span><br><span class="achv-desc">' + a.desc + '</span></span>';
+        achvGrid.appendChild(item);
+      });
+    }
+
+    let toastTimer = null;
+    function showAchvToast(icon, title, name) {
+      const toast = document.getElementById('achvToast');
+      toast.innerHTML = '<span class="achv-toast-icon">' + icon + '</span><span><span class="achv-toast-title mono">' + title + '</span><br><span class="achv-toast-name">' + name + '</span></span>';
+      toast.classList.add('show');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+    }
+
+    // ---------- Enganches al chat existente ----------
+    registerDayVisit();
+    registerActivity();
+    checkAchievements();
+
+    function hookOutgoingMessage() {
+      const text = input.value.trim();
+      if (!text) return;
+      analyzeEmotion(text);
+      detectAutoMemory(text);
+      stats.messages++;
+      stats.responses++;
+      registerActivity();
+      saveStats();
+      checkAchievements();
+    }
+    document.addEventListener('click', (e) => {
+      if (e.target === sendBtn) hookOutgoingMessage();
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (e.target === input && e.key === 'Enter' && !e.shiftKey) hookOutgoingMessage();
+    }, true);
+
+    fileInput.addEventListener('change', () => {
+      localStorage.setItem('zpit_had_file', 'true');
+      checkAchievements();
+    });
+
+    [geoDashCard, pacCard].forEach((card) => {
+      card.addEventListener('click', () => {
+        localStorage.setItem('zpit_had_game', 'true');
+        checkAchievements();
+      });
+    });
+
+    // Expuesto para que el fetch a /api/chat pueda mandar memoria y estado emocional
+    window.zpitGetMemories = function () { return memories.map((m) => m.text); };
+    window.zpitGetEmotion = function () { return emotion; };
+  })();
+</script>
+</body>
+</html>
